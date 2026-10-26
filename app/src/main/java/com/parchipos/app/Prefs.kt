@@ -26,6 +26,8 @@ object Prefs {
         val width: Int,
         /** Off for a counter with no kitchen, where the bill alone is enough. */
         val printParchi: Boolean,
+        /** The printer's smaller Font B: same slip, about a third less paper. */
+        val small: Boolean,
     )
 
     fun shop(c: Context): Shop {
@@ -38,6 +40,7 @@ object Prefs {
             p.getString("footer", "")!!,
             p.getInt("width", DEF_WIDTH),
             p.getBoolean("printParchi", true),
+            p.getBoolean("smallPrint", true),
         )
     }
 
@@ -52,6 +55,7 @@ object Prefs {
             .putString("gstin", s.gstin)
             .putString("footer", s.footer)
             .putBoolean("printParchi", s.printParchi)
+            .putBoolean("smallPrint", s.small)
             .apply()
     }
 

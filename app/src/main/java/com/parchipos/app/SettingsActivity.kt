@@ -24,6 +24,7 @@ class SettingsActivity : Activity() {
     private lateinit var printerPort: EditText
     private lateinit var paper: RadioGroup
     private lateinit var printParchi: CheckBox
+    private lateinit var smallPrint: CheckBox
     private lateinit var shopName: EditText
     private lateinit var address: EditText
     private lateinit var phone: EditText
@@ -42,6 +43,7 @@ class SettingsActivity : Activity() {
         printerPort = findViewById(R.id.printerPort)
         paper = findViewById(R.id.paper)
         printParchi = findViewById(R.id.printParchi)
+        smallPrint = findViewById(R.id.smallPrint)
         shopName = findViewById(R.id.shopName)
         address = findViewById(R.id.address)
         phone = findViewById(R.id.phone)
@@ -54,6 +56,7 @@ class SettingsActivity : Activity() {
         printerPort.setText(Prefs.printerPort(this).toString())
         paper.check(if (shop.width == 32) R.id.paper58 else R.id.paper80)
         printParchi.isChecked = shop.printParchi
+        smallPrint.isChecked = shop.small
         shopName.setText(shop.name)
         address.setText(shop.address)
         phone.setText(shop.phone)
@@ -92,6 +95,7 @@ class SettingsActivity : Activity() {
         footer = footer.text.toString().trim(),
         width = if (paper.checkedRadioButtonId == R.id.paper58) 32 else Prefs.DEF_WIDTH,
         printParchi = printParchi.isChecked,
+        small = smallPrint.isChecked,
     )
 
     private fun readPrinter(): Pair<String, Int> = Pair(

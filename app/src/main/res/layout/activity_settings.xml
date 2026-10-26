@@ -81,6 +81,15 @@
                 android:textColor="@color/ink"
                 android:textSize="14sp" />
 
+            <CheckBox
+                android:id="@+id/smallPrint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="44dp"
+                android:text="@string/label_small_print"
+                android:textColor="@color/ink"
+                android:textSize="14sp" />
+
             <Button
                 android:id="@+id/btnTest"
                 android:layout_width="match_parent"

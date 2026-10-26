@@ -92,6 +92,7 @@
     <string name="paper_80">80 mm</string>
     <string name="paper_58">58 mm</string>
     <string name="label_print_parchi">Print a kitchen parchi with every bill</string>
+    <string name="label_small_print">Small print (shorter slips, less paper)</string>
     <string name="btn_test">Test print</string>
     <string name="hint_test">The phone must be on the same Wi-Fi as the printer.</string>
     <string name="label_shop_name">Shop name</string>
