@@ -23,8 +23,13 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # The action's default package list includes "tools", which newer
+      # cmdline-tools no longer carry, so sdkmanager fails before the build
+      # starts. Name exactly what compileSdk 34 needs instead.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
 
       # Pinned rather than relying on whatever Gradle the runner image ships:
       # AGP 8.5.2 requires Gradle 8.7+, and an image bump could silently break
