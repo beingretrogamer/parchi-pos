@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/side_padding"
+        android:paddingEnd="@dimen/side_padding"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp">
+
+        <TextView
+            style="@style/PageTitle"
+            android:text="@string/title_sales" />
+
+        <!-- ── Day ────────────────────────────────────────────── -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnPrevDay"
+                style="@style/TopButton"
+                android:layout_marginStart="0dp"
+                android:text="@string/prev" />
+
+            <TextView
+                android:id="@+id/dayLabel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:textColor="@color/ink"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btnNextDay"
+                style="@style/TopButton"
+                android:text="@string/next" />
+        </LinearLayout>
+
+        <!-- ── Summary ────────────────────────────────────────── -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/card"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <TextView
+                android:id="@+id/dayTotal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/ink"
+                android:textSize="30sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/daySplit"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:lineSpacingExtra="3dp"
+                android:textColor="@color/ink_soft"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/dayItems"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="monospace"
+                android:lineSpacingExtra="2dp"
+                android:textColor="@color/ink_soft"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnShare"
+                    style="@style/PayButton"
+                    android:text="@string/btn_share_summary" />
+
+                <Button
+                    android:id="@+id/btnExportDay"
+                    style="@style/PayButton"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/btn_export_day" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/btnExportAll"
+                style="@style/PayButton"
+                android:layout_width="match_parent"
+                android:layout_weight="0"
+                android:layout_marginTop="8dp"
+                android:text="@string/btn_export_all" />
+        </LinearLayout>
+
+        <!-- ── Bills ──────────────────────────────────────────── -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/card"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <TextView style="@style/SectionLabel" android:text="@string/section_bills" />
+
+            <TextView
+                android:id="@+id/noBills"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/no_bills"
+                android:textColor="@color/ink_faint"
+                android:textSize="14sp" />
+
+            <LinearLayout
+                android:id="@+id/billList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

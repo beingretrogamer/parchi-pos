@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="24dp"
+    android:paddingEnd="24dp"
+    android:paddingTop="8dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:lineSpacingExtra="2dp"
+        android:text="@string/paste_help"
+        android:textColor="@color/ink_soft"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/pasteText"
+        android:layout_width="match_parent"
+        android:layout_height="200dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/field"
+        android:fontFamily="monospace"
+        android:gravity="top|start"
+        android:hint="@string/paste_hint"
+        android:importantForAutofill="no"
+        android:inputType="textMultiLine|textCapWords"
+        android:padding="12dp"
+        android:textColor="@color/ink"
+        android:textColorHint="@color/ink_faint"
+        android:textSize="14sp" />
+</LinearLayout>
