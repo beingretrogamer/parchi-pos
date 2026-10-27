@@ -453,7 +453,7 @@ class MainActivity : Activity() {
         }
         clearCart()
         if (!printSlips) {
-            Toast.makeText(this, getString(R.string.toast_saved, token), Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.toast_sale_saved, token), Toast.LENGTH_LONG).show()
             return
         }
         Toast.makeText(this, getString(R.string.toast_printing, token), Toast.LENGTH_SHORT).show()
