@@ -13,8 +13,10 @@
     <string name="pay_cash">Cash</string>
     <string name="pay_upi">UPI</string>
     <string name="btn_clear">Clear</string>
-    <string name="btn_charge">Print bill &amp; parchi · %1$d · %2$s</string>
+    <string name="btn_charge">Print · %1$d · %2$s</string>
     <string name="toast_printing">Token %1$d — printing…</string>
+    <string name="btn_save_only">Save</string>
+    <string name="toast_saved">Token %1$d saved — not printed. Print it later from Sales.</string>
     <string name="save_failed">Could not save this sale, so nothing was printed: %1$s</string>
     <string name="print_failed_title">Token %1$d did not print</string>
     <string name="print_failed_body">The sale is saved. %1$s\n\nRetry now, or reprint it later from Sales.</string>

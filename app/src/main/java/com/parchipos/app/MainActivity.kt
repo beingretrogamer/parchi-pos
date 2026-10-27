@@ -106,7 +106,8 @@ class MainActivity : Activity() {
         titleView.typeface = Typeface.create("cursive", Typeface.BOLD)
         titleView.textSize = 26f
         titleView.setTextColor(getColor(R.color.accent))
-        btnCharge.setOnClickListener { charge() }
+        btnCharge.setOnClickListener { charge(printSlips = true) }
+        findViewById<Button>(R.id.btnSave).setOnClickListener { charge(printSlips = false) }
         renderPayment()
     }
 
@@ -427,7 +428,8 @@ class MainActivity : Activity() {
         renderCart()
     }
 
-    private fun charge() {
+    /** `printSlips = false` records the sale and skips both slips; Sales can print it later. */
+    private fun charge(printSlips: Boolean) {
         if (cart.isEmpty()) return
         val now = System.currentTimeMillis()
         val token = Prefs.nextToken(this)
@@ -450,6 +452,10 @@ class MainActivity : Activity() {
             return
         }
         clearCart()
+        if (!printSlips) {
+            Toast.makeText(this, getString(R.string.toast_saved, token), Toast.LENGTH_LONG).show()
+            return
+        }
         Toast.makeText(this, getString(R.string.toast_printing, token), Toast.LENGTH_SHORT).show()
         print(sale)
     }

@@ -54,7 +54,9 @@ and has nothing listening on a port.
   menu. If nothing matches a search, the last tile offers to add what you
   typed, so only the price is left to fill in.
 - Optionally enter a customer name, pick **Cash** or **UPI**, then press
-  **Print bill & parchi**.
+  **Print**, which prints the bill and the parchi.
+- **Save** next to it records the sale without printing either slip. It gets a
+  token like any other sale, and you can print it later from **Sales**.
 - The sale is saved **before** anything prints, and the cart clears straight
   away for the next customer. If the printer is off, the app offers **Retry**.
   The sale is never lost, and you can reprint it later from **Sales**.
