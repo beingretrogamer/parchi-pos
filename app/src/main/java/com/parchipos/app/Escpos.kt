@@ -25,6 +25,7 @@ object Escpos {
         init { raw(ESC, 0x40) } // ESC @ — reset whatever the last job left behind
 
         fun raw(vararg b: Int) = apply { b.forEach { out.write(it) } }
+        fun image(raster: ByteArray) = apply { out.write(raster) }
 
         /**
          * Printers ship with a code page that has no ₹ and no Devanagari, so
@@ -61,6 +62,9 @@ object Escpos {
         else -> 64
     }
 
+    /** Printable dots across: 576 on 80mm paper, 384 on 58mm. */
+    private fun dots(shop: Prefs.Shop) = if (shop.width == 32) 384 else 576
+
     private fun start(shop: Prefs.Shop): Builder {
         val b = Builder()
         if (shop.small) b.font(true).spacing(22)
@@ -73,7 +77,8 @@ object Escpos {
 
         // Double height only, never double width: the name stays on one line.
         b.center()
-        if (shop.name.isNotBlank()) b.bold(true).size(0x01).line(shop.name.take(w)).size(0).bold(false)
+        if (shop.brand) b.image(Wordmark.escpos(dots(shop)))
+        else if (shop.name.isNotBlank()) b.bold(true).size(0x01).line(shop.name.take(w)).size(0).bold(false)
         if (shop.address.isNotBlank()) wrap(shop.address, w).forEach { b.line(it) }
         val contact = listOfNotNull(
             shop.phone.takeIf { it.isNotBlank() }?.let { "Ph: $it" },
@@ -157,8 +162,9 @@ object Escpos {
 
     fun test(shop: Prefs.Shop): ByteArray {
         val w = cols(shop)
-        return start(shop)
-            .center().bold(true).size(0x01).line("TEST PRINT").size(0).bold(false)
+        val b = start(shop).center()
+        if (shop.brand) b.image(Wordmark.escpos(dots(shop)))
+        return b.bold(true).size(0x01).line("TEST PRINT").size(0).bold(false)
             .line(dateTime(System.currentTimeMillis()))
             .line("-".repeat(w))
             .line("If you can read this,")

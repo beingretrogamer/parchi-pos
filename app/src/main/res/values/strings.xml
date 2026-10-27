@@ -20,6 +20,10 @@
     <string name="print_failed_body">The sale is saved. %1$s\n\nRetry now, or reprint it later from Sales.</string>
     <string name="btn_retry">Retry</string>
     <string name="custom_item">+ Custom item</string>
+    <string name="custom_item_named">+ Add “%s”</string>
+    <string name="btn_custom">+ Custom</string>
+    <string name="hint_search">Search menu…</string>
+    <string name="cart_title">ORDER  ·  %d ITEMS</string>
     <string name="custom_item_title">Custom item</string>
     <string name="edit_line">Edit line</string>
     <string name="btn_remove">Remove</string>
@@ -92,6 +96,7 @@
     <string name="paper_80">80 mm</string>
     <string name="paper_58">58 mm</string>
     <string name="label_print_parchi">Print a kitchen parchi with every bill</string>
+    <string name="label_print_brand">Print the Scoops &amp; Sips logo on the bill</string>
     <string name="label_small_print">Small print (shorter slips, less paper)</string>
     <string name="btn_test">Test print</string>
     <string name="hint_test">The phone must be on the same Wi-Fi as the printer.</string>

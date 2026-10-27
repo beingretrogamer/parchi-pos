@@ -90,6 +90,27 @@
                 android:textColor="@color/ink"
                 android:textSize="14sp" />
 
+            <CheckBox
+                android:id="@+id/printBrand"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="44dp"
+                android:text="@string/label_print_brand"
+                android:textColor="@color/ink"
+                android:textSize="14sp" />
+
+            <!-- Always on white: it is a picture of the paper. -->
+            <ImageView
+                android:id="@+id/brandPreview"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:adjustViewBounds="true"
+                android:background="#FFFFFF"
+                android:contentDescription="@string/label_print_brand"
+                android:padding="8dp"
+                android:scaleType="fitCenter" />
+
             <Button
                 android:id="@+id/btnTest"
                 android:layout_width="match_parent"

@@ -28,8 +28,11 @@ and has nothing listening on a port.
 1. **Settings**: enter the printer IP and port (usually `9100`), choose 80 or
    58 mm paper, then press **Test print**. The phone must be on the same Wi-Fi
    as the printer.
-2. In the same screen, fill in the shop name, address, phone, optional GSTIN
-   and footer. These are printed at the top and bottom of the bill.
+2. In the same screen, fill in the address, phone, optional GSTIN and
+   footer. These are printed at the top and bottom of the bill. The bill
+   starts with a drawn Scoops & Sips logo (previewed in Settings). Turn it
+   off to print the shop name as text instead. **Small print**, on by
+   default, uses the printer's smaller font for shorter slips.
 3. **Menu**: the app starts with the TUB's × Scoops & Sips menu already
    loaded: 73 items in 16 categories, copied from the boards. Items with
    sizes or flavours are one tile each, and their price field reads
@@ -46,8 +49,10 @@ and has nothing listening on a port.
   quantity, or to add a note for the kitchen, such as "less spicy" or "Mint
   mojito" for a combo. Notes print on both slips. The edit applies to that
   bill only and never changes the menu.
-- **+ Custom item**, at the end of the tiles, rings up something that isn't
-  on the menu.
+- **Search** filters the whole menu as you type.
+- **+ Custom**, next to the search box, rings up something that isn't on the
+  menu. If nothing matches a search, the last tile offers to add what you
+  typed, so only the price is left to fill in.
 - Optionally enter a customer name, pick **Cash** or **UPI**, then press
   **Print bill & parchi**.
 - The sale is saved **before** anything prints, and the cart clears straight

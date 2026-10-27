@@ -4,13 +4,17 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.res.Configuration
+import android.graphics.Typeface
 import android.os.Bundle
+import android.text.Editable
 import android.text.TextUtils
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -46,11 +50,13 @@ class MainActivity : Activity() {
     )
 
     private lateinit var titleView: TextView
+    private lateinit var search: EditText
     private lateinit var categoryScroll: HorizontalScrollView
     private lateinit var categoryBar: LinearLayout
     private lateinit var itemGrid: LinearLayout
     private lateinit var emptyMenu: View
     private lateinit var cartCard: View
+    private lateinit var cartTitle: TextView
     private lateinit var cartScroll: ScrollView
     private lateinit var cartLines: LinearLayout
     private lateinit var customer: EditText
@@ -70,11 +76,13 @@ class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
 
         titleView = findViewById(R.id.title)
+        search = findViewById(R.id.search)
         categoryScroll = findViewById(R.id.categoryScroll)
         categoryBar = findViewById(R.id.categoryBar)
         itemGrid = findViewById(R.id.itemGrid)
         emptyMenu = findViewById(R.id.emptyMenu)
         cartCard = findViewById(R.id.cartCard)
+        cartTitle = findViewById(R.id.cartTitle)
         cartScroll = findViewById(R.id.cartScroll)
         cartLines = findViewById(R.id.cartLines)
         customer = findViewById(R.id.customer)
@@ -88,7 +96,16 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.btnSettings).setOnClickListener { open(SettingsActivity::class.java) }
         payCash.setOnClickListener { payment = "CASH"; renderPayment() }
         payUpi.setOnClickListener { payment = "UPI"; renderPayment() }
-        findViewById<Button>(R.id.btnClear).setOnClickListener { clearCart() }
+        findViewById<View>(R.id.btnClear).setOnClickListener { clearCart() }
+        findViewById<Button>(R.id.btnCustom).setOnClickListener { editLine(null, query()) }
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) = renderGrid()
+        })
+        titleView.typeface = Typeface.create("cursive", Typeface.BOLD)
+        titleView.textSize = 26f
+        titleView.setTextColor(getColor(R.color.accent))
         btnCharge.setOnClickListener { charge() }
         renderPayment()
     }
@@ -97,7 +114,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         val shopName = Prefs.shop(this).name
-        titleView.text = shopName.ifBlank { getString(R.string.app_name) }
+        titleView.text = shopName.ifBlank { Wordmark.NAME }
 
         // The cart is left alone: its lines are snapshots, possibly edited,
         // and a menu change mid-order should not reprice what was agreed.
@@ -144,7 +161,10 @@ class MainActivity : Activity() {
     private fun renderGrid() {
         itemGrid.removeAllViews()
         emptyMenu.visibility = if (menu.isEmpty()) View.VISIBLE else View.GONE
-        val shown = menu.filter { category == null || it.category == category }
+        // A search looks across the whole menu, whatever category is picked.
+        val q = query()
+        val shown = if (q.isNotEmpty()) menu.filter { it.name.contains(q, ignoreCase = true) }
+            else menu.filter { category == null || it.category == category }
 
         // Roughly 110dp a tile: three across on a phone, more on a tablet.
         val usableDp = resources.configuration.screenWidthDp - 2 * resources.getDimension(R.dimen.side_padding) / resources.displayMetrics.density
@@ -155,12 +175,15 @@ class MainActivity : Activity() {
         tiles.chunked(cols).forEach { rowItems ->
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             for (i in 0 until cols) {
-                val lp = LinearLayout.LayoutParams(0, dp(76), 1f).apply {
+                // MATCH_PARENT in a wrap-content row: every tile takes the
+                // height of the tallest, so long names grow the row instead
+                // of being cut off.
+                val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply {
                     if (i > 0) marginStart = dp(8)
                 }
                 val view = when {
                     i >= rowItems.size -> View(this)
-                    rowItems[i] == null -> customTile()
+                    rowItems[i] == null -> customTile(q)
                     else -> tile(rowItems[i]!!)
                 }
                 row.addView(view, lp)
@@ -174,27 +197,63 @@ class MainActivity : Activity() {
     private fun tile(item: MenuItem): View {
         val qty = cart.values.filter { it.itemId == item.id }.sumOf { it.qty }
         val prices = item.variants.map { it.price }.ifEmpty { listOf(item.price) }
-        val priceText = if (prices.min() == prices.max()) rs(prices.min()) else "${rs(prices.min())}–${rs(prices.max())}"
-        return TextView(this).apply {
-            text = (if (qty > 0) "$qty × " else "") + item.name + "\n" + priceText
+        val priceText = if (prices.min() == prices.max()) rs(prices.min()) else "${rs(prices.min())} – ${rs(prices.max())}"
+
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(84)
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+        }
+        body.addView(TextView(this).apply {
+            text = item.name
             textSize = 14f
-            maxLines = 3
+            maxLines = 4
             ellipsize = TextUtils.TruncateAt.END
-            gravity = Gravity.CENTER
-            setPadding(dp(6), dp(4), dp(6), dp(4))
             setTextColor(getColor(R.color.ink))
+            // Room for the badge, so a count never sits on the name.
+            if (qty > 0) setPadding(0, 0, dp(18), 0)
+        })
+        body.addView(TextView(this).apply {
+            text = priceText
+            textSize = 13f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(getColor(R.color.accent))
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(4)
+        })
+
+        return FrameLayout(this).apply {
             setBackgroundResource(if (qty > 0) R.drawable.tile_selected else R.drawable.tile)
             setOnClickListener { pick(item) }
+            addView(body, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            if (qty > 0) addView(TextView(this@MainActivity).apply {
+                text = qty.toString()
+                textSize = 12f
+                gravity = Gravity.CENTER
+                minWidth = dp(22)
+                setPadding(dp(6), 0, dp(6), 0)
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(getColor(R.color.on_accent))
+                setBackgroundResource(R.drawable.badge)
+            }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, dp(22), Gravity.TOP or Gravity.END).apply {
+                setMargins(0, dp(6), dp(6), 0)
+            })
         }
     }
 
-    private fun customTile(): View = TextView(this).apply {
-        text = getString(R.string.custom_item)
+    /** Always at the end of the grid; during a search it offers to ring up what was typed. */
+    private fun customTile(q: String): View = TextView(this).apply {
+        text = if (q.isEmpty()) getString(R.string.custom_item) else getString(R.string.custom_item_named, q)
         textSize = 14f
         gravity = Gravity.CENTER
-        setTextColor(getColor(R.color.ink_soft))
+        minHeight = dp(84)
+        maxLines = 3
+        ellipsize = TextUtils.TruncateAt.END
+        setPadding(dp(8), dp(8), dp(8), dp(8))
+        setTextColor(getColor(R.color.accent))
         setBackgroundResource(R.drawable.tile_custom)
-        setOnClickListener { editLine(null) }
+        setOnClickListener { editLine(null, q) }
     }
 
     /** Single-price items go straight in; the rest ask which size or flavour. */
@@ -269,6 +328,7 @@ class MainActivity : Activity() {
 
         val total = cart.values.sumOf { it.price * it.qty }
         val count = cart.values.sumOf { it.qty }
+        cartTitle.text = getString(R.string.cart_title, count)
         btnCharge.text = getString(R.string.btn_charge, count, rs(total))
     }
 
@@ -310,13 +370,13 @@ class MainActivity : Activity() {
      * Edit a line of the bill being rung up — name, rate, quantity, a note for
      * the kitchen — or, with null, add something that is not on the menu.
      */
-    private fun editLine(line: CartLine?) {
+    private fun editLine(line: CartLine?, prefill: String = "") {
         val form = layoutInflater.inflate(R.layout.dialog_line, null)
         val name = form.findViewById<EditText>(R.id.lineName)
         val price = form.findViewById<EditText>(R.id.linePrice)
         val qty = form.findViewById<EditText>(R.id.lineQty)
         val note = form.findViewById<EditText>(R.id.lineNote)
-        name.setText(line?.name ?: "")
+        name.setText(line?.name ?: prefill)
         price.setText(line?.let { Sales.money(it.price).removeSuffix(".00") } ?: "")
         qty.setText((line?.qty ?: 1).toString())
         note.setText(line?.note ?: "")
@@ -353,12 +413,14 @@ class MainActivity : Activity() {
                 }
             }
         }
-        (if (line == null) name else price).requestFocus()
+        // A custom item named from the search box only needs its price.
+        (if (line == null && prefill.isEmpty()) name else price).requestFocus()
     }
 
     private fun clearCart() {
         cart.clear()
         customer.setText("")
+        search.setText("")
         payment = "CASH"
         renderPayment()
         renderGrid()
@@ -405,6 +467,8 @@ class MainActivity : Activity() {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────
+
+    private fun query(): String = search.text.toString().trim()
 
     private fun TextView.singleLine() {
         maxLines = 1

@@ -28,6 +28,8 @@ object Prefs {
         val printParchi: Boolean,
         /** The printer's smaller Font B: same slip, about a third less paper. */
         val small: Boolean,
+        /** The drawn Scoops & Sips wordmark in place of the shop name as text. */
+        val brand: Boolean,
     )
 
     fun shop(c: Context): Shop {
@@ -41,6 +43,7 @@ object Prefs {
             p.getInt("width", DEF_WIDTH),
             p.getBoolean("printParchi", true),
             p.getBoolean("smallPrint", true),
+            p.getBoolean("printBrand", true),
         )
     }
 
@@ -56,6 +59,7 @@ object Prefs {
             .putString("footer", s.footer)
             .putBoolean("printParchi", s.printParchi)
             .putBoolean("smallPrint", s.small)
+            .putBoolean("printBrand", s.brand)
             .apply()
     }
 

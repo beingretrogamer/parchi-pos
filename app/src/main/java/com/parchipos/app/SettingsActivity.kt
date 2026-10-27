@@ -12,6 +12,7 @@ import android.os.Looper
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
@@ -25,6 +26,7 @@ class SettingsActivity : Activity() {
     private lateinit var paper: RadioGroup
     private lateinit var printParchi: CheckBox
     private lateinit var smallPrint: CheckBox
+    private lateinit var printBrand: CheckBox
     private lateinit var shopName: EditText
     private lateinit var address: EditText
     private lateinit var phone: EditText
@@ -44,6 +46,7 @@ class SettingsActivity : Activity() {
         paper = findViewById(R.id.paper)
         printParchi = findViewById(R.id.printParchi)
         smallPrint = findViewById(R.id.smallPrint)
+        printBrand = findViewById(R.id.printBrand)
         shopName = findViewById(R.id.shopName)
         address = findViewById(R.id.address)
         phone = findViewById(R.id.phone)
@@ -57,6 +60,9 @@ class SettingsActivity : Activity() {
         paper.check(if (shop.width == 32) R.id.paper58 else R.id.paper80)
         printParchi.isChecked = shop.printParchi
         smallPrint.isChecked = shop.small
+        printBrand.isChecked = shop.brand
+        // The exact bitmap the bill prints, so there is no surprise at the printer.
+        findViewById<ImageView>(R.id.brandPreview).setImageBitmap(Wordmark.bitmap(576))
         shopName.setText(shop.name)
         address.setText(shop.address)
         phone.setText(shop.phone)
@@ -96,6 +102,7 @@ class SettingsActivity : Activity() {
         width = if (paper.checkedRadioButtonId == R.id.paper58) 32 else Prefs.DEF_WIDTH,
         printParchi = printParchi.isChecked,
         small = smallPrint.isChecked,
+        brand = printBrand.isChecked,
     )
 
     private fun readPrinter(): Pair<String, Int> = Pair(
