@@ -11,6 +11,7 @@ import android.text.TextUtils
 import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
@@ -69,11 +70,14 @@ class MainActivity : Activity() {
     private val cart = LinkedHashMap<String, CartLine>()
     private var category: String? = null
     private var payment = "CASH"
+    /** Views padded with side_padding, which the layout only reads once; see onConfigurationChanged. */
+    private val sidePadded = ArrayList<View>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         PrintLog.init(this)
         setContentView(R.layout.activity_main)
+        collectSidePadded(findViewById(android.R.id.content))
 
         titleView = findViewById(R.id.title)
         search = findViewById(R.id.search)
@@ -130,11 +134,20 @@ class MainActivity : Activity() {
     /** Declared in the manifest so a rotation keeps the cart; only the grid reflows. */
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        // Folding or unfolding a Fold crosses the sw600dp line without
+        // re-inflating, so the margins would stay sized for the other screen.
+        val pad = resources.getDimensionPixelSize(R.dimen.side_padding)
+        sidePadded.forEach { it.setPaddingRelative(pad, it.paddingTop, pad, it.paddingBottom) }
         renderGrid()
         renderCart()
     }
 
     private fun open(cls: Class<*>) = startActivity(Intent(this, cls))
+
+    private fun collectSidePadded(v: View) {
+        if (v.tag == "sidePad") sidePadded.add(v)
+        if (v is ViewGroup) for (i in 0 until v.childCount) collectSidePadded(v.getChildAt(i))
+    }
 
     // ── Rendering ─────────────────────────────────────────────────────
 
