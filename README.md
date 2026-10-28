@@ -57,6 +57,10 @@ and has nothing listening on a port.
   **Print**, which prints the bill and the parchi.
 - **Save** next to it records the sale without printing either slip. It gets a
   token like any other sale, and you can print it later from **Sales**.
+- **Missed a bill on an earlier day?** In **Sales**, go back to that day and
+  tap **+ Add a missed bill for this day**, or tap **📅 Today** on the order and
+  pick the date. Bills then go on that day, with the next token for that day,
+  until you tap **✕**. The Print button names the day, so it is hard to miss.
 - The sale is saved **before** anything prints, and the cart clears straight
   away for the next customer. If the printer is off, the app offers **Retry**.
   The sale is never lost, and you can reprint it later from **Sales**.

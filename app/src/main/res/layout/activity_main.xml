@@ -186,6 +186,17 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/btnBillDay"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:background="@drawable/row_bg_plain"
+                android:gravity="center"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
                 android:id="@+id/btnClear"
                 android:layout_width="wrap_content"
                 android:layout_height="36dp"

@@ -2,6 +2,7 @@ package com.parchipos.app
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.DatePickerDialog
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Typeface
@@ -22,6 +23,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -64,12 +66,19 @@ class MainActivity : Activity() {
     private lateinit var payCash: Button
     private lateinit var payUpi: Button
     private lateinit var btnCharge: Button
+    private lateinit var btnBillDay: TextView
 
     private var menu: List<MenuItem> = emptyList()
     /** Insertion-ordered, so the bill lists items in the order they were rung up. */
     private val cart = LinkedHashMap<String, CartLine>()
     private var category: String? = null
     private var payment = "CASH"
+    /**
+     * Midnight of a past day when ringing up bills that were missed, else null
+     * for now. It stays set across bills, since a missed day is usually several
+     * bills, and is shown loudly on the cart and the Print button.
+     */
+    private var billDay: Long? = null
     /** Views padded with side_padding, which the layout only reads once; see onConfigurationChanged. */
     private val sidePadded = ArrayList<View>()
 
@@ -93,6 +102,8 @@ class MainActivity : Activity() {
         payCash = findViewById(R.id.payCash)
         payUpi = findViewById(R.id.payUpi)
         btnCharge = findViewById(R.id.btnCharge)
+        btnBillDay = findViewById(R.id.btnBillDay)
+        btnBillDay.setOnClickListener { if (billDay != null) setBillDay(null) else pickBillDay() }
 
         findViewById<Button>(R.id.btnSales).setOnClickListener { open(SalesActivity::class.java) }
         findViewById<Button>(R.id.btnMenu).setOnClickListener { open(MenuActivity::class.java) }
@@ -113,6 +124,13 @@ class MainActivity : Activity() {
         btnCharge.setOnClickListener { charge(printSlips = true) }
         findViewById<Button>(R.id.btnSave).setOnClickListener { charge(printSlips = false) }
         renderPayment()
+        intent.takeIf { it.hasExtra(EXTRA_BILL_DAY) }?.let { setBillDay(it.getLongExtra(EXTRA_BILL_DAY, 0)) }
+    }
+
+    /** Sales' "add a missed bill" lands here with the day it was showing. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.hasExtra(EXTRA_BILL_DAY)) setBillDay(intent.getLongExtra(EXTRA_BILL_DAY, 0))
     }
 
     /** Menu and shop name may have changed on another screen. */
@@ -343,7 +361,11 @@ class MainActivity : Activity() {
         val total = cart.values.sumOf { it.price * it.qty }
         val count = cart.values.sumOf { it.qty }
         cartTitle.text = getString(R.string.cart_title, count)
-        btnCharge.text = getString(R.string.btn_charge, count, rs(total))
+        val day = billDay
+        btnCharge.text = if (day == null) getString(R.string.btn_charge, count, rs(total))
+            else getString(R.string.btn_charge_past, count, rs(total), shortDay(day))
+        btnBillDay.text = if (day == null) getString(R.string.bill_day_today) else getString(R.string.bill_day_past, shortDay(day))
+        btnBillDay.setTextColor(getColor(if (day == null) R.color.ink_soft else R.color.accent))
     }
 
     private fun stepper(label: String, onClick: () -> Unit) = Button(this).apply {
@@ -444,8 +466,26 @@ class MainActivity : Activity() {
     /** `printSlips = false` records the sale and skips both slips; Sales can print it later. */
     private fun charge(printSlips: Boolean) {
         if (cart.isEmpty()) return
-        val now = System.currentTimeMillis()
-        val token = Prefs.nextToken(this)
+        val day = billDay
+        val now: Long
+        val token: Int
+        if (day == null) {
+            now = System.currentTimeMillis()
+            token = Prefs.nextToken(this)
+        } else {
+            // Today's clock time on the missed day, so the bills keep the order
+            // they were entered in. Tokens carry on from that day's last one and
+            // leave today's counter alone.
+            val clock = Calendar.getInstance()
+            now = Calendar.getInstance().apply {
+                timeInMillis = day
+                set(Calendar.HOUR_OF_DAY, clock.get(Calendar.HOUR_OF_DAY))
+                set(Calendar.MINUTE, clock.get(Calendar.MINUTE))
+                set(Calendar.SECOND, clock.get(Calendar.SECOND))
+            }.timeInMillis
+            val dayKey = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(now))
+            token = (Sales.forDay(this, dayKey).maxOfOrNull { it.token } ?: 0) + 1
+        }
         val sale = Sale(
             id = SimpleDateFormat("yyMMdd", Locale.US).format(Date(now)) + "-" + token.toString().padStart(3, '0'),
             token = token,
@@ -489,6 +529,33 @@ class MainActivity : Activity() {
 
     private fun query(): String = search.text.toString().trim()
 
+    private fun pickBillDay() {
+        val c = Calendar.getInstance()
+        DatePickerDialog(this, { _, y, m, d ->
+            setBillDay(Calendar.getInstance().apply { clear(); set(y, m, d) }.timeInMillis)
+        }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).apply {
+            datePicker.maxDate = c.timeInMillis
+        }.show()
+    }
+
+    /** Null, or any time today, goes back to billing now. */
+    private fun setBillDay(time: Long?) {
+        val today = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+        val wasPast = billDay != null
+        billDay = time?.takeIf { SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(it)) < today }?.let {
+            Calendar.getInstance().apply {
+                timeInMillis = it
+                set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+        }
+        val day = billDay
+        if (day != null) Toast.makeText(this, getString(R.string.toast_bill_day, shortDay(day)), Toast.LENGTH_LONG).show()
+        else if (wasPast) Toast.makeText(this, R.string.toast_bill_day_today, Toast.LENGTH_SHORT).show()
+        renderCart()
+    }
+
+    private fun shortDay(t: Long): String = SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(Date(t))
+
     private fun TextView.singleLine() {
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
@@ -498,6 +565,8 @@ class MainActivity : Activity() {
 
     companion object {
         private const val ROW_DP = 48
+        /** Midnight of a past day to bill, from Sales' "add a missed bill". */
+        const val EXTRA_BILL_DAY = "billDay"
 
         /** Whole rupees without the ".00" — the screen is read at a glance. */
         fun rs(n: Double): String =

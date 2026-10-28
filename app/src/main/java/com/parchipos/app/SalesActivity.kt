@@ -52,6 +52,13 @@ class SalesActivity : Activity() {
             if (!isToday()) { day.add(Calendar.DAY_OF_MONTH, 1); load() }
         }
         findViewById<Button>(R.id.btnShare).setOnClickListener { shareSummary() }
+        // Back to the till, which bills the day shown here until told otherwise.
+        findViewById<Button>(R.id.btnAddMissed).setOnClickListener {
+            startActivity(Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(MainActivity.EXTRA_BILL_DAY, day.timeInMillis))
+            finish()
+        }
         findViewById<Button>(R.id.btnExportDay).setOnClickListener {
             export(Sales.toCsv(sales), "sales-${fileDay()}.csv")
         }
@@ -77,6 +84,7 @@ class SalesActivity : Activity() {
         dayItems.visibility = if (live.isEmpty()) View.GONE else View.VISIBLE
 
         noBills.visibility = if (sales.isEmpty()) View.VISIBLE else View.GONE
+        findViewById<Button>(R.id.btnAddMissed).visibility = if (isToday()) View.GONE else View.VISIBLE
         billList.removeAllViews()
         sales.forEach { billList.addView(billRow(it)) }
     }

@@ -121,6 +121,18 @@
 
             <TextView style="@style/SectionLabel" android:text="@string/section_bills" />
 
+            <!-- Past days only: today's bills are rung up on the till as usual. -->
+            <Button
+                android:id="@+id/btnAddMissed"
+                style="@style/PayButton"
+                android:layout_width="match_parent"
+                android:layout_weight="0"
+                android:layout_marginBottom="8dp"
+                android:text="@string/btn_add_missed"
+                android:textColor="@color/accent"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
             <TextView
                 android:id="@+id/noBills"
                 android:layout_width="match_parent"
