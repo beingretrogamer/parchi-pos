@@ -88,6 +88,8 @@
     <string name="void_bill">Void bill</string>
     <string name="restore_bill">Restore bill</string>
     <string name="change_date">Change date</string>
+    <string name="change_payment">Change payment to %1$s</string>
+    <string name="payment_changed">Token %1$d is now %2$s</string>
     <string name="date_changed">Token %1$d moved to %2$s as token %3$d</string>
     <string name="void_confirm">Void token %1$d (%2$s)? It stays listed but is left out of the totals.</string>
     <string name="reprint_ok">Token %1$d reprinted</string>

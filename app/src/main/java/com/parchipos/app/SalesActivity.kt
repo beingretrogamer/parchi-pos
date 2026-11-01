@@ -131,6 +131,7 @@ class SalesActivity : Activity() {
             getString(R.string.reprint_parchi),
             getString(if (s.voided) R.string.restore_bill else R.string.void_bill),
             getString(R.string.change_date),
+            getString(R.string.change_payment, if (s.payment == "UPI") getString(R.string.pay_cash) else getString(R.string.pay_upi)),
         )
         // A custom title, because a stock one cuts off after two lines and the
         // point is to see what was on the bill before reprinting or voiding it.
@@ -147,6 +148,12 @@ class SalesActivity : Activity() {
                     2 -> reprint(s, bill = false, parchi = true)
                     3 -> confirmVoid(s)
                     4 -> changeDate(s)
+                    5 -> {
+                        val to = if (s.payment == "UPI") "CASH" else "UPI"
+                        Sales.setPayment(this, s.id, to)
+                        load()
+                        toast(getString(R.string.payment_changed, s.token, to))
+                    }
                 }
             }
             .show()

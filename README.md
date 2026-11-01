@@ -63,6 +63,8 @@ and has nothing listening on a port.
   Every new order starts on today again.
 - **Bill on the wrong day?** In **Sales**, tap it and pick **Change date**. It
   moves to that day with the next token there.
+- **Wrong payment mode?** Tap the bill in **Sales** and pick **Change payment
+  to UPI** (or **to Cash**). The day's Cash and UPI split follows.
 - The sale is saved **before** anything prints, and the cart clears straight
   away for the next customer. If the printer is off, the app offers **Retry**.
   The sale is never lost, and you can reprint it later from **Sales**.

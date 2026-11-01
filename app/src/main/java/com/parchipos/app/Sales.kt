@@ -66,6 +66,12 @@ object Sales {
         rewrite(c, all(c).map { if (it.id == id) it.copy(voided = voided) else it })
     }
 
+    /** For a bill rung up as Cash that was paid by UPI, or the other way round. */
+    @Synchronized
+    fun setPayment(c: Context, id: String, payment: String) {
+        rewrite(c, all(c).map { if (it.id == id) it.copy(payment = payment) else it })
+    }
+
     private fun rewrite(c: Context, sales: List<Sale>) {
         val tmp = File(c.filesDir, "$FILE.tmp")
         tmp.writeText(sales.joinToString("") { toJson(it).toString() + "\n" })
