@@ -70,10 +70,10 @@ object Prefs {
      * "fourteen" is easier to hear than a bill number.
      */
     @Synchronized
-    fun nextToken(c: Context): Int {
+    fun nextToken(c: Context, atLeast: Int = 1): Int {
         val today = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
         val prefs = p(c)
-        val n = if (prefs.getString("tokenDay", null) == today) prefs.getInt("token", 0) + 1 else 1
+        val n = maxOf(atLeast, if (prefs.getString("tokenDay", null) == today) prefs.getInt("token", 0) + 1 else 1)
         prefs.edit().putString("tokenDay", today).putInt("token", n).apply()
         return n
     }

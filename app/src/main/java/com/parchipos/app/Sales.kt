@@ -5,6 +5,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -62,10 +63,41 @@ object Sales {
 
     @Synchronized
     fun setVoided(c: Context, id: String, voided: Boolean) {
-        val updated = all(c).map { if (it.id == id) it.copy(voided = voided) else it }
+        rewrite(c, all(c).map { if (it.id == id) it.copy(voided = voided) else it })
+    }
+
+    private fun rewrite(c: Context, sales: List<Sale>) {
         val tmp = File(c.filesDir, "$FILE.tmp")
-        tmp.writeText(updated.joinToString("") { toJson(it).toString() + "\n" })
+        tmp.writeText(sales.joinToString("") { toJson(it).toString() + "\n" })
         tmp.renameTo(File(c.filesDir, FILE))
+    }
+
+    /**
+     * Moves a bill to another day, keeping its clock time. It takes the next
+     * token on that day, and a new id to match, since the id is date + token
+     * and must not collide with a bill already there.
+     */
+    @Synchronized
+    fun moveToDay(c: Context, id: String, day: Long): Sale? {
+        val all = all(c)
+        val old = all.find { it.id == id } ?: return null
+        val time = Calendar.getInstance().apply {
+            val clock = Calendar.getInstance().apply { timeInMillis = old.time }
+            timeInMillis = day
+            set(Calendar.HOUR_OF_DAY, clock.get(Calendar.HOUR_OF_DAY))
+            set(Calendar.MINUTE, clock.get(Calendar.MINUTE))
+            set(Calendar.SECOND, clock.get(Calendar.SECOND))
+        }.timeInMillis
+        val key = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(time))
+        if (key == old.day) return old
+        val token = (all.filter { it.day == key }.maxOfOrNull { it.token } ?: 0) + 1
+        val moved = old.copy(
+            id = SimpleDateFormat("yyMMdd", Locale.US).format(Date(time)) + "-" + token.toString().padStart(3, '0'),
+            token = token,
+            time = time,
+        )
+        rewrite(c, all.map { if (it.id == id) moved else it })
+        return moved
     }
 
     /** One row per item line, which is what a spreadsheet wants to pivot on. */

@@ -74,9 +74,10 @@ class MainActivity : Activity() {
     private var category: String? = null
     private var payment = "CASH"
     /**
-     * Midnight of a past day when ringing up bills that were missed, else null
-     * for now. It stays set across bills, since a missed day is usually several
-     * bills, and is shown loudly on the cart and the Print button.
+     * Midnight of a past day when ringing up a bill that was missed, else null
+     * for now. It belongs to the one order: cleared with the cart, and when the
+     * till is left with an empty cart, so a new order always starts on today.
+     * Keeping it across bills once put a following day's sales on the old date.
      */
     private var billDay: Long? = null
     /** Views padded with side_padding, which the layout only reads once; see onConfigurationChanged. */
@@ -125,6 +126,12 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.btnSave).setOnClickListener { charge(printSlips = false) }
         renderPayment()
         intent.takeIf { it.hasExtra(EXTRA_BILL_DAY) }?.let { setBillDay(it.getLongExtra(EXTRA_BILL_DAY, 0)) }
+    }
+
+    /** An order in progress keeps its date; an empty till goes back to today. */
+    override fun onStop() {
+        super.onStop()
+        if (cart.isEmpty()) billDay = null
     }
 
     /** Sales' "add a missed bill" lands here with the day it was showing. */
@@ -398,6 +405,7 @@ class MainActivity : Activity() {
     private fun step(line: CartLine, delta: Int) {
         line.qty += delta
         if (line.qty <= 0) cart.remove(line.key)
+        if (cart.isEmpty()) billDay = null
         renderGrid()
         renderCart()
     }
@@ -455,6 +463,7 @@ class MainActivity : Activity() {
 
     private fun clearCart() {
         cart.clear()
+        billDay = null
         customer.setText("")
         search.setText("")
         payment = "CASH"
@@ -471,7 +480,9 @@ class MainActivity : Activity() {
         val token: Int
         if (day == null) {
             now = System.currentTimeMillis()
-            token = Prefs.nextToken(this)
+            // A bill moved onto today in Sales may already hold the next number.
+            val today = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(now))
+            token = Prefs.nextToken(this, atLeast = (Sales.forDay(this, today).maxOfOrNull { it.token } ?: 0) + 1)
         } else {
             // Today's clock time on the missed day, so the bills keep the order
             // they were entered in. Tokens carry on from that day's last one and

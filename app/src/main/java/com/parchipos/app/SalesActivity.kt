@@ -2,6 +2,7 @@ package com.parchipos.app
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.DatePickerDialog
 import android.content.Intent
 import android.graphics.Paint
 import android.os.Bundle
@@ -129,6 +130,7 @@ class SalesActivity : Activity() {
             getString(R.string.reprint_bill),
             getString(R.string.reprint_parchi),
             getString(if (s.voided) R.string.restore_bill else R.string.void_bill),
+            getString(R.string.change_date),
         )
         // A custom title, because a stock one cuts off after two lines and the
         // point is to see what was on the bill before reprinting or voiding it.
@@ -144,6 +146,7 @@ class SalesActivity : Activity() {
                     1 -> reprint(s, bill = true, parchi = false)
                     2 -> reprint(s, bill = false, parchi = true)
                     3 -> confirmVoid(s)
+                    4 -> changeDate(s)
                 }
             }
             .show()
@@ -159,6 +162,21 @@ class SalesActivity : Activity() {
         Printer.send(this, "reprint token ${s.token}", bytes) { err ->
             toast(if (err == null) getString(R.string.reprint_ok, s.token) else getString(R.string.reprint_failed, err))
         }
+    }
+
+    /** For bills that landed on the wrong day. The bill follows to its new day's list. */
+    private fun changeDate(s: Sale) {
+        val c = Calendar.getInstance().apply { timeInMillis = s.time }
+        DatePickerDialog(this, { _, y, m, d ->
+            val day = Calendar.getInstance().apply { clear(); set(y, m, d) }
+            val moved = Sales.moveToDay(this, s.id, day.timeInMillis) ?: return@DatePickerDialog
+            if (moved.id == s.id) return@DatePickerDialog
+            this.day.timeInMillis = day.timeInMillis
+            load()
+            toast(getString(R.string.date_changed, s.token, SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(day.time), moved.token))
+        }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).apply {
+            datePicker.maxDate = System.currentTimeMillis()
+        }.show()
     }
 
     private fun confirmVoid(s: Sale) {

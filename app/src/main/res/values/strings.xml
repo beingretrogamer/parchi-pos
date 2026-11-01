@@ -19,7 +19,7 @@
     <string name="bill_day_today">📅 Today</string>
     <string name="bill_day_past">📅 %1$s ✕</string>
     <string name="btn_charge_past">Print · %1$d · %2$s · for %3$s</string>
-    <string name="toast_bill_day">New bills go on %1$s until you tap ✕</string>
+    <string name="toast_bill_day">This order goes on %1$s. Tap ✕ for today.</string>
     <string name="toast_bill_day_today">Back to today\'s bills</string>
     <string name="btn_add_missed">+ Add a missed bill for this day</string>
     <string name="toast_sale_saved">Token %1$d saved — not printed. Print it later from Sales.</string>
@@ -87,6 +87,8 @@
     <string name="reprint_parchi">Reprint parchi only</string>
     <string name="void_bill">Void bill</string>
     <string name="restore_bill">Restore bill</string>
+    <string name="change_date">Change date</string>
+    <string name="date_changed">Token %1$d moved to %2$s as token %3$d</string>
     <string name="void_confirm">Void token %1$d (%2$s)? It stays listed but is left out of the totals.</string>
     <string name="reprint_ok">Token %1$d reprinted</string>
     <string name="reprint_failed">Could not print: %1$s</string>
