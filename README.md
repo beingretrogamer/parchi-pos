@@ -99,9 +99,12 @@ five minutes while it is open. Bills not sent yet show **↑ not synced** in
 **Sales**.
 
 In IceCreamOS, a bill posts once each item name on it is linked to a
-material. **Settings → Parchi POS** lists the unlinked names, the bills that
-could not post (usually not enough stock), and a day-by-day check of what
-each phone rang up against what reached the books.
+material. A bill posts even if IceCreamOS shows no stock for it: the sale
+happened, so it is booked and that location's stock goes negative, which
+shows what was never received. **Settings → Parchi POS** lists the unlinked
+names, any bill that could not post (for example a made-to-order item with
+no recipe), and a day-by-day check of what each phone rang up against what
+reached the books.
 
 Use one key per phone. To move a phone to a new key, press **New key** on that
 phone's entry rather than adding the phone again, or its history arrives a

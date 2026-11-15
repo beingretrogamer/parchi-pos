@@ -203,7 +203,7 @@ class SettingsActivity : Activity() {
         val o = JSONObject(json)
         val words = mapOf(
             "POSTED" to "posted", "VOIDED" to "voided", "UNMAPPED" to "need item links",
-            "BLOCKED" to "can't post (stock?)", "PENDING" to "queued", "POSTING" to "posting",
+            "BLOCKED" to "can't post", "PENDING" to "queued", "POSTING" to "posting",
         )
         words.keys.filter { o.optInt(it) > 0 }.joinToString(", ") { "${o.getInt(it)} ${words[it]}" }
     } catch (_: Exception) { "" }
