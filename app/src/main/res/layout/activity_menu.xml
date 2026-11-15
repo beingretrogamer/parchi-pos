@@ -53,6 +53,17 @@
             android:paddingBottom="10dp">
 
             <TextView
+                android:id="@+id/menuShared"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="4dp"
+                android:paddingBottom="8dp"
+                android:text="@string/menu_shared"
+                android:textColor="@color/accent"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <TextView
                 android:id="@+id/noItems"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

@@ -29,7 +29,19 @@ class MenuActivity : Activity() {
         findViewById<Button>(R.id.btnAdd).setOnClickListener { edit(null) }
         findViewById<Button>(R.id.btnPaste).setOnClickListener { paste() }
         findViewById<Button>(R.id.btnReset).setOnClickListener { confirmReset() }
+        findViewById<TextView>(R.id.menuShared).visibility = if (Sync.configured(this)) View.VISIBLE else View.GONE
         render()
+    }
+
+    /** Shares this phone's edits, and shows another phone's if they just arrived. */
+    override fun onResume() {
+        super.onResume()
+        Sync.kick(this) { runOnUiThread { if (!isFinishing) render() } }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Sync.kick(this)
     }
 
     private fun render() {

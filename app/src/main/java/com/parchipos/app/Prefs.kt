@@ -1,6 +1,7 @@
 package com.parchipos.app
 
 import android.content.Context
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -48,9 +49,17 @@ object Prefs {
     }
 
     fun save(c: Context, ip: String, port: Int, s: Shop) {
+        // Shop details are shared by every phone; the printer address is not.
+        if (s != shop(c)) setSharedDirty(c, "settings", true)
+        writeShop(c, s)
         p(c).edit()
             .putString("printerIp", ip)
             .putInt("printerPort", port)
+            .apply()
+    }
+
+    private fun writeShop(c: Context, s: Shop) {
+        p(c).edit()
             .putInt("width", s.width)
             .putString("shopName", s.name)
             .putString("address", s.address)
@@ -107,6 +116,50 @@ object Prefs {
         if (device != null) e.putString("syncDevice", device)
         if (counts != null) e.putString("syncCounts", counts)
         e.apply()
+    }
+
+    // ── Across phones ───────────────────────────────────────────────────
+
+    /** This phone's token letter from IceCreamOS; empty until the first sync. */
+    fun letter(c: Context): String = p(c).getString("letter", "")!!
+    fun setLetter(c: Context, letter: String) = p(c).edit().putString("letter", letter).apply()
+
+    /** Server-time cursor into IceCreamOS's bill feed. */
+    fun feedCursor(c: Context): String = p(c).getString("feedCursor", "")!!
+    fun setFeedCursor(c: Context, cursor: String) = p(c).edit().putString("feedCursor", cursor).apply()
+
+    /** Something the last sync wants the shop to know (another phone's change won); cleared by Sync now. */
+    fun syncNote(c: Context): String = p(c).getString("syncNote", "")!!
+    fun setSyncNote(c: Context, note: String) = p(c).edit().putString("syncNote", note).apply()
+
+    /** Version of a shared doc ("menu", "settings") this phone last took or wrote; 0 = never. */
+    fun sharedVersion(c: Context, key: String): Int = p(c).getInt("sharedV_$key", 0)
+    fun setSharedVersion(c: Context, key: String, v: Int) = p(c).edit().putInt("sharedV_$key", v).apply()
+
+    /** Changed on this phone and not yet accepted by IceCreamOS. */
+    fun sharedDirty(c: Context, key: String): Boolean = p(c).getBoolean("sharedDirty_$key", false)
+    fun setSharedDirty(c: Context, key: String, dirty: Boolean) = p(c).edit().putBoolean("sharedDirty_$key", dirty).apply()
+
+    /** The shared shop details as JSON: everything in [Shop], none of the printer address. */
+    fun shopJson(c: Context): String {
+        val s = shop(c)
+        return JSONObject()
+            .put("name", s.name).put("address", s.address).put("phone", s.phone).put("gstin", s.gstin)
+            .put("footer", s.footer).put("width", s.width).put("printParchi", s.printParchi)
+            .put("small", s.small).put("brand", s.brand)
+            .toString()
+    }
+
+    /** Takes shop details another phone shared. False if [json] is unreadable. */
+    fun applyShopJson(c: Context, json: String): Boolean {
+        val o = try { JSONObject(json) } catch (_: Exception) { return false }
+        val cur = shop(c)
+        writeShop(c, Shop(
+            o.optString("name", cur.name), o.optString("address", cur.address), o.optString("phone", cur.phone),
+            o.optString("gstin", cur.gstin), o.optString("footer", cur.footer), o.optInt("width", cur.width),
+            o.optBoolean("printParchi", cur.printParchi), o.optBoolean("small", cur.small), o.optBoolean("brand", cur.brand),
+        ))
+        return true
     }
 
     private fun p(c: Context) = c.getSharedPreferences(FILE, Context.MODE_PRIVATE)

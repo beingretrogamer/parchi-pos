@@ -87,7 +87,8 @@ class MainActivity : Activity() {
     /** Catches up bills rung up while offline, for as long as the till is open. */
     private val syncTick = object : Runnable {
         override fun run() {
-            Sync.kick(this@MainActivity)
+            // Another phone's menu change shows up without leaving the till.
+            Sync.kick(this@MainActivity) { ui.post { if (!isFinishing) reloadMenu() } }
             ui.postDelayed(this, SYNC_EVERY_MS)
         }
     }
@@ -159,6 +160,14 @@ class MainActivity : Activity() {
     /** Menu and shop name may have changed on another screen. */
     override fun onResume() {
         super.onResume()
+        reloadMenu()
+        renderCart()
+        ui.removeCallbacks(syncTick)
+        syncTick.run()
+    }
+
+    /** Menu and shop name, as changed on another screen or on another phone. */
+    private fun reloadMenu() {
         val shopName = Prefs.shop(this).name
         titleView.text = shopName.ifBlank { Wordmark.NAME }
 
@@ -169,9 +178,6 @@ class MainActivity : Activity() {
 
         renderCategories()
         renderGrid()
-        renderCart()
-        ui.removeCallbacks(syncTick)
-        syncTick.run()
     }
 
     /** Declared in the manifest so a rotation keeps the cart; only the grid reflows. */
@@ -496,11 +502,13 @@ class MainActivity : Activity() {
         val day = billDay
         val now: Long
         val token: Int
+        // Tokens count per phone (other phones' bills are in Sales too, under their own letters).
+        val letter = Prefs.letter(this)
         if (day == null) {
             now = System.currentTimeMillis()
             // A bill moved onto today in Sales may already hold the next number.
             val today = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(now))
-            token = Prefs.nextToken(this, atLeast = (Sales.forDay(this, today).maxOfOrNull { it.token } ?: 0) + 1)
+            token = Prefs.nextToken(this, atLeast = Sales.maxToken(Sales.all(this), today, "", letter) + 1)
         } else {
             // Today's clock time on the missed day, so the bills keep the order
             // they were entered in. Tokens carry on from that day's last one and
@@ -513,11 +521,12 @@ class MainActivity : Activity() {
                 set(Calendar.SECOND, clock.get(Calendar.SECOND))
             }.timeInMillis
             val dayKey = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(now))
-            token = (Sales.forDay(this, dayKey).maxOfOrNull { it.token } ?: 0) + 1
+            token = Sales.maxToken(Sales.all(this), dayKey, "", letter) + 1
         }
         val sale = Sale(
-            id = SimpleDateFormat("yyMMdd", Locale.US).format(Date(now)) + "-" + token.toString().padStart(3, '0'),
+            id = Sales.billId(now, letter, token),
             token = token,
+            letter = letter,
             time = now,
             lines = cart.values.map { SaleLine(it.name, it.price, it.qty, it.note) },
             payment = payment,
@@ -536,18 +545,18 @@ class MainActivity : Activity() {
         clearCart()
         Sync.kick(this)
         if (!printSlips) {
-            Toast.makeText(this, getString(R.string.toast_sale_saved, token), Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.toast_sale_saved, sale.label), Toast.LENGTH_LONG).show()
             return
         }
-        Toast.makeText(this, getString(R.string.toast_printing, token), Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.toast_printing, sale.label), Toast.LENGTH_SHORT).show()
         print(sale)
     }
 
     private fun print(sale: Sale) {
-        Printer.send(this, "token ${sale.token}", Printer.saleBytes(this, sale)) { err ->
+        Printer.send(this, "token ${sale.label}", Printer.saleBytes(this, sale)) { err ->
             if (err == null || isFinishing) return@send
             AlertDialog.Builder(this)
-                .setTitle(getString(R.string.print_failed_title, sale.token))
+                .setTitle(getString(R.string.print_failed_title, sale.label))
                 .setMessage(getString(R.string.print_failed_body, err))
                 .setPositiveButton(R.string.btn_retry) { _, _ -> print(sale) }
                 .setNegativeButton(R.string.btn_later, null)

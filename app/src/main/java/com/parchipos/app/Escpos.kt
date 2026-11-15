@@ -87,7 +87,7 @@ object Escpos {
         if (contact.isNotEmpty()) wrap(contact, w).forEach { b.line(it) }
 
         b.left().line("-".repeat(w))
-        b.bold(true).size(0x01).line(row2("TOKEN ${sale.token}", dateTime(sale.time), w)).size(0).bold(false)
+        b.bold(true).size(0x01).line(row2("TOKEN ${sale.label}", dateTime(sale.time), w)).size(0).bold(false)
         b.line(row2("Bill ${sale.id}", sale.customer, w))
         b.line("-".repeat(w))
 
@@ -135,7 +135,7 @@ object Escpos {
         val big = shop.width
         val b = start(shop)
 
-        b.center().bold(true).size(0x11).line("TOKEN ${sale.token}").size(0)
+        b.center().bold(true).size(0x11).line("TOKEN ${sale.label}").size(0)
         b.line("KITCHEN  " + time(sale.time) + if (sale.customer.isNotBlank()) "  ${sale.customer}" else "").bold(false)
         b.left().line("-".repeat(w))
 

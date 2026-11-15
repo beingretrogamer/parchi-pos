@@ -42,6 +42,8 @@ class SettingsActivity : Activity() {
     private lateinit var syncStatus: TextView
 
     private val ui = Handler(Looper.getMainLooper())
+    /** Shop details as shown when the screen opened (or last refreshed); see save(). */
+    private lateinit var loadedShop: Prefs.Shop
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,20 +69,11 @@ class SettingsActivity : Activity() {
         serverUrl.setText(Prefs.serverUrl(this))
         findViewById<Button>(R.id.btnSyncNow).setOnClickListener { syncNow() }
 
-        val shop = Prefs.shop(this)
         printerIp.setText(Prefs.printerIp(this))
         printerPort.setText(Prefs.printerPort(this).toString())
-        paper.check(if (shop.width == 32) R.id.paper58 else R.id.paper80)
-        printParchi.isChecked = shop.printParchi
-        smallPrint.isChecked = shop.small
-        printBrand.isChecked = shop.brand
         // The exact bitmap the bill prints, so there is no surprise at the printer.
         findViewById<ImageView>(R.id.brandPreview).setImageBitmap(Wordmark.bitmap(576))
-        shopName.setText(shop.name)
-        address.setText(shop.address)
-        phone.setText(shop.phone)
-        gstin.setText(shop.gstin)
-        footer.setText(shop.footer)
+        fillShop()
 
         findViewById<Button>(R.id.btnSave).setOnClickListener { if (save()) finish() }
         findViewById<Button>(R.id.btnTest).setOnClickListener { testPrint() }
@@ -107,6 +100,20 @@ class SettingsActivity : Activity() {
         save(quiet = true)
     }
 
+    private fun fillShop() {
+        val shop = Prefs.shop(this)
+        loadedShop = shop
+        paper.check(if (shop.width == 32) R.id.paper58 else R.id.paper80)
+        printParchi.isChecked = shop.printParchi
+        smallPrint.isChecked = shop.small
+        printBrand.isChecked = shop.brand
+        shopName.setText(shop.name)
+        address.setText(shop.address)
+        phone.setText(shop.phone)
+        gstin.setText(shop.gstin)
+        footer.setText(shop.footer)
+    }
+
     private fun readShop() = Prefs.Shop(
         name = shopName.text.toString().trim(),
         address = address.text.toString().trim(),
@@ -128,7 +135,11 @@ class SettingsActivity : Activity() {
         val (ip, port) = readPrinter()
         if (!looksLikeHost(ip)) { if (!quiet) toast(getString(R.string.bad_ip)); return false }
         if (port !in 1..65535) { if (!quiet) toast(getString(R.string.bad_port)); return false }
-        Prefs.save(this, ip, port, readShop())
+        // Shop details are shared: write them only if they were changed on this
+        // screen, so leaving it never undoes what another phone just sent.
+        val shop = readShop()
+        Prefs.save(this, ip, port, if (shop == loadedShop) Prefs.shop(this) else shop)
+        loadedShop = Prefs.shop(this)
         if (Prefs.saveSync(this, serverUrl.text.toString(), syncKey.text.toString())) Sync.forget(this)
         if (!quiet) toast(getString(R.string.toast_saved))
         return true
@@ -179,7 +190,15 @@ class SettingsActivity : Activity() {
         if (!save(quiet = true)) return
         if (!Sync.configured(this)) { renderSync(); return }
         syncStatus.text = getString(R.string.sync_started)
-        Sync.kick(this) { ui.post { if (!isFinishing) renderSync() } }
+        Prefs.setSyncNote(this, "")
+        Sync.kick(this) {
+            ui.post {
+                if (isFinishing) return@post
+                // Another phone's shop details may have just arrived.
+                if (readShop() == loadedShop) fillShop()
+                renderSync()
+            }
+        }
     }
 
     private fun renderSync() {
@@ -193,6 +212,8 @@ class SettingsActivity : Activity() {
             )
             if (st.at > 0) lines += getString(R.string.sync_last, SimpleDateFormat("d MMM, HH:mm", Locale.getDefault()).format(Date(st.at)))
             if (st.error.isNotEmpty()) lines += getString(R.string.sync_error, st.error)
+            Prefs.syncNote(this).takeIf { it.isNotEmpty() }?.let { lines += it }
+            Prefs.letter(this).takeIf { it.isNotEmpty() }?.let { lines += getString(R.string.sync_letter, it) }
             serverCounts(st.counts).takeIf { it.isNotEmpty() }?.let { lines += getString(R.string.sync_server, st.device, it) }
             ui.post { if (!isFinishing) syncStatus.text = lines.joinToString("\n") }
         }

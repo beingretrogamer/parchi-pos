@@ -72,12 +72,13 @@ class SalesActivity : Activity() {
     /** uids of bills IceCreamOS has not got in their current state; empty when sync is off. */
     private var unsynced: Set<String> = emptySet()
 
-    private fun load() {
+    private fun load(kick: Boolean = true) {
         sales = Sales.forDay(this, SimpleDateFormat("yyyyMMdd", Locale.US).format(day.time)).sortedByDescending { it.time }
-        // load() follows every edit here, so this is also what sends one.
+        // load() follows every edit here, so this is also what sends one; when
+        // the sync finishes, other phones' bills and edits are shown too.
         if (Sync.configured(this)) {
             unsynced = Sync.pending(this).map { it.uid }.toSet()
-            Sync.kick(this)
+            if (kick) Sync.kick(this) { runOnUiThread { if (!isFinishing) load(kick = false) } }
         }
         dayLabel.text = if (isToday()) getString(R.string.today) else SimpleDateFormat("EEE, d MMM yyyy", Locale.getDefault()).format(day.time)
 
@@ -86,7 +87,11 @@ class SalesActivity : Activity() {
         val cash = live.filter { it.payment == "CASH" }.sumOf { it.total }
         val upi = live.filter { it.payment == "UPI" }.sumOf { it.total }
         val voided = sales.size - live.size
+        // Every phone's bills arrive through IceCreamOS; say how much was this one's.
+        val others = live.filterNot { it.mine }
         daySplit.text = getString(R.string.day_split, live.size, MainActivity.rs(cash), MainActivity.rs(upi)) +
+            (if (others.isNotEmpty()) "\n" + getString(R.string.day_split_phones,
+                MainActivity.rs(live.filter { it.mine }.sumOf { it.total }), MainActivity.rs(others.sumOf { it.total })) else "") +
             if (voided > 0) "\n" + getString(R.string.day_voided, voided) else ""
 
         dayItems.text = itemTotals(live).joinToString("\n") { (name, qty) -> "${qty.toString().padStart(4)}  $name" }
@@ -113,8 +118,8 @@ class SalesActivity : Activity() {
             setOnClickListener { billActions(s) }
         }
         val time = SimpleDateFormat("HH:mm", Locale.US).format(Date(s.time))
-        row.addView(text("#${s.token}", 16f, bold = true), LinearLayout.LayoutParams(dp(52), LinearLayout.LayoutParams.WRAP_CONTENT))
-        val desc = listOf(time, getString(R.string.n_items, s.itemCount), s.payment, s.customer,
+        row.addView(text("#${s.label}", 16f, bold = true), LinearLayout.LayoutParams(dp(60), LinearLayout.LayoutParams.WRAP_CONTENT))
+        val desc = listOf(time, getString(R.string.n_items, s.itemCount), s.payment, s.phone, s.customer,
             if (s.uid in unsynced) getString(R.string.not_synced) else "")
             .filter { it.isNotBlank() }.joinToString("  ·  ")
         row.addView(text(desc, 14f, colour = R.color.ink_soft), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
@@ -144,7 +149,8 @@ class SalesActivity : Activity() {
         )
         // A custom title, because a stock one cuts off after two lines and the
         // point is to see what was on the bill before reprinting or voiding it.
-        val header = text(getString(R.string.bill_title, s.token, MainActivity.rs(s.total)) + "\n\n" + detail, 15f).apply {
+        val header = text(getString(R.string.bill_title, s.label, MainActivity.rs(s.total)) +
+            (if (s.mine) "" else "  ·  ${s.phone}") + "\n\n" + detail, 15f).apply {
             maxLines = Int.MAX_VALUE
             setPadding(dp(24), dp(20), dp(24), dp(8))
         }
@@ -159,9 +165,9 @@ class SalesActivity : Activity() {
                     4 -> changeDate(s)
                     5 -> {
                         val to = if (s.payment == "UPI") "CASH" else "UPI"
-                        Sales.setPayment(this, s.id, to)
+                        Sales.setPayment(this, s.uid, to)
                         load()
-                        toast(getString(R.string.payment_changed, s.token, to))
+                        toast(getString(R.string.payment_changed, s.label, to))
                     }
                 }
             }
@@ -175,8 +181,8 @@ class SalesActivity : Activity() {
         var bytes = ByteArray(0)
         if (bill) bytes += Escpos.bill(shop, s)
         if (parchi) bytes += Escpos.parchi(shop, s)
-        Printer.send(this, "reprint token ${s.token}", bytes) { err ->
-            toast(if (err == null) getString(R.string.reprint_ok, s.token) else getString(R.string.reprint_failed, err))
+        Printer.send(this, "reprint token ${s.label}", bytes) { err ->
+            toast(if (err == null) getString(R.string.reprint_ok, s.label) else getString(R.string.reprint_failed, err))
         }
     }
 
@@ -185,11 +191,11 @@ class SalesActivity : Activity() {
         val c = Calendar.getInstance().apply { timeInMillis = s.time }
         DatePickerDialog(this, { _, y, m, d ->
             val day = Calendar.getInstance().apply { clear(); set(y, m, d) }
-            val moved = Sales.moveToDay(this, s.id, day.timeInMillis) ?: return@DatePickerDialog
+            val moved = Sales.moveToDay(this, s.uid, day.timeInMillis) ?: return@DatePickerDialog
             if (moved.id == s.id) return@DatePickerDialog
             this.day.timeInMillis = day.timeInMillis
             load()
-            toast(getString(R.string.date_changed, s.token, SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(day.time), moved.token))
+            toast(getString(R.string.date_changed, s.label, SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(day.time), moved.label))
         }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).apply {
             datePicker.maxDate = System.currentTimeMillis()
         }.show()
@@ -197,13 +203,13 @@ class SalesActivity : Activity() {
 
     private fun confirmVoid(s: Sale) {
         if (s.voided) {
-            Sales.setVoided(this, s.id, false)
+            Sales.setVoided(this, s.uid, false)
             load()
             return
         }
         AlertDialog.Builder(this)
-            .setMessage(getString(R.string.void_confirm, s.token, MainActivity.rs(s.total)))
-            .setPositiveButton(R.string.void_bill) { _, _ -> Sales.setVoided(this, s.id, true); load() }
+            .setMessage(getString(R.string.void_confirm, s.label, MainActivity.rs(s.total)))
+            .setPositiveButton(R.string.void_bill) { _, _ -> Sales.setVoided(this, s.uid, true); load() }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
     }

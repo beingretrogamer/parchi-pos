@@ -70,18 +70,18 @@ object Menu {
         val items = all(c).toMutableList()
         val i = items.indexOfFirst { it.id == item.id }
         if (i >= 0) items[i] = item else items.add(item)
-        write(c, items)
+        edited(c, items)
     }
 
     @Synchronized
-    fun addAll(c: Context, new: List<MenuItem>) = write(c, all(c) + new)
+    fun addAll(c: Context, new: List<MenuItem>) = edited(c, all(c) + new)
 
     @Synchronized
-    fun delete(c: Context, id: String) = write(c, all(c).filterNot { it.id == id })
+    fun delete(c: Context, id: String) = edited(c, all(c).filterNot { it.id == id })
 
     /** Swaps in the menu from the boards, for a fresh start. */
     @Synchronized
-    fun resetToDefault(c: Context) = write(c, parseLines(DEFAULT_MENU).items)
+    fun resetToDefault(c: Context) = edited(c, parseLines(DEFAULT_MENU).items)
 
     /** Moves one item up or down, so the counter can put the bestsellers first. */
     @Synchronized
@@ -91,7 +91,7 @@ object Menu {
         val to = from + delta
         if (from < 0 || to !in items.indices) return
         items.add(to, items.removeAt(from))
-        write(c, items)
+        edited(c, items)
     }
 
     fun newId(): String = UUID.randomUUID().toString()
@@ -148,6 +148,40 @@ object Menu {
 
     private fun plain(n: Double): String =
         if (n == Math.floor(n)) n.toLong().toString() else String.format(Locale.US, "%.2f", n)
+
+    /** A change made on this phone: saved, and marked to be shared with the other phones. */
+    private fun edited(c: Context, items: List<MenuItem>) {
+        write(c, items)
+        Prefs.setSharedDirty(c, "menu", true)
+    }
+
+    /** The menu as shared through IceCreamOS: exactly this phone's menu.json. */
+    @Synchronized
+    fun sharedJson(c: Context): String {
+        all(c) // seeds the default on a brand-new install
+        return File(c.filesDir, FILE).readText()
+    }
+
+    /**
+     * Takes the menu another phone shared. The menu it replaces is kept in
+     * menu.backup.json, in case a phone's own edits were the ones that lost.
+     * Returns false (and changes nothing) if [json] is not a readable menu.
+     */
+    @Synchronized
+    fun applyShared(c: Context, json: String): Boolean {
+        try {
+            val arr = JSONArray(json)
+            for (i in 0 until arr.length()) arr.getJSONObject(i).let { it.getString("id"); it.getString("name"); it.getDouble("price") }
+        } catch (_: Exception) {
+            return false
+        }
+        val f = File(c.filesDir, FILE)
+        if (f.exists()) f.copyTo(File(c.filesDir, "menu.backup.json"), overwrite = true)
+        val tmp = File(c.filesDir, "$FILE.tmp")
+        tmp.writeText(json)
+        tmp.renameTo(f)
+        return true
+    }
 
     private fun write(c: Context, items: List<MenuItem>) {
         val arr = JSONArray()

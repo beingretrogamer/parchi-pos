@@ -14,7 +14,7 @@
     <string name="pay_upi">UPI</string>
     <string name="btn_clear">Clear</string>
     <string name="btn_charge">Print · %1$d · %2$s</string>
-    <string name="toast_printing">Token %1$d — printing…</string>
+    <string name="toast_printing">Token %1$s — printing…</string>
     <string name="btn_save_only">Save</string>
     <string name="bill_day_today">📅 Today</string>
     <string name="bill_day_past">📅 %1$s ✕</string>
@@ -22,9 +22,9 @@
     <string name="toast_bill_day">This order goes on %1$s. Tap ✕ for today.</string>
     <string name="toast_bill_day_today">Back to today\'s bills</string>
     <string name="btn_add_missed">+ Add a missed bill for this day</string>
-    <string name="toast_sale_saved">Token %1$d saved — not printed. Print it later from Sales.</string>
+    <string name="toast_sale_saved">Token %1$s saved — not printed. Print it later from Sales.</string>
     <string name="save_failed">Could not save this sale, so nothing was printed: %1$s</string>
-    <string name="print_failed_title">Token %1$d did not print</string>
+    <string name="print_failed_title">Token %1$s did not print</string>
     <string name="print_failed_body">The sale is saved. %1$s\n\nRetry now, or reprint it later from Sales.</string>
     <string name="btn_retry">Retry</string>
     <string name="custom_item">+ Custom item</string>
@@ -81,7 +81,7 @@
     <string name="section_bills">BILLS</string>
     <string name="no_bills">No bills on this day.</string>
     <string name="n_items">%1$d items</string>
-    <string name="bill_title">Token %1$d · %2$s</string>
+    <string name="bill_title">Token %1$s · %2$s</string>
     <string name="reprint_both">Reprint bill &amp; parchi</string>
     <string name="reprint_bill">Reprint bill only</string>
     <string name="reprint_parchi">Reprint parchi only</string>
@@ -89,6 +89,10 @@
     <string name="restore_bill">Restore bill</string>
     <string name="change_date">Change date</string>
     <string name="not_synced">↑ not synced</string>
+    <string name="day_split_phones">This phone %1$s · other phones %2$s</string>
+    <string name="sync_letter">This phone prints tokens as %1$s1, %1$s2, …</string>
+    <string name="sync_conflict">%1$s was changed on another phone at the same time; that version was kept</string>
+    <string name="menu_shared">Shared with every phone through IceCreamOS. A change here reaches the others on their next sync.</string>
     <string name="label_sync">Cloud sync · IceCreamOS</string>
     <string name="label_sync_key">This phone\'s key</string>
     <string name="hint_sync_key">pchk_… from IceCreamOS → Settings → Parchi POS</string>
@@ -102,10 +106,10 @@
     <string name="sync_server">In IceCreamOS (%1$s): %2$s</string>
     <string name="sync_started">Syncing…</string>
     <string name="change_payment">Change payment to %1$s</string>
-    <string name="payment_changed">Token %1$d is now %2$s</string>
-    <string name="date_changed">Token %1$d moved to %2$s as token %3$d</string>
-    <string name="void_confirm">Void token %1$d (%2$s)? It stays listed but is left out of the totals.</string>
-    <string name="reprint_ok">Token %1$d reprinted</string>
+    <string name="payment_changed">Token %1$s is now %2$s</string>
+    <string name="date_changed">Token %1$s moved to %2$s as token %3$s</string>
+    <string name="void_confirm">Void token %1$s (%2$s)? It stays listed but is left out of the totals.</string>
+    <string name="reprint_ok">Token %1$s reprinted</string>
     <string name="reprint_failed">Could not print: %1$s</string>
     <string name="export_ok">Exported</string>
     <string name="export_failed">Export failed: %1$s</string>
