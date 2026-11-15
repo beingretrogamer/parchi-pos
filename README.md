@@ -110,6 +110,30 @@ Use one key per phone. To move a phone to a new key, press **New key** on that
 phone's entry rather than adding the phone again, or its history arrives a
 second time as another phone's.
 
+### Several phones at once
+
+Once synced, the phones work as one till:
+
+- **Tokens carry the phone's letter.** IceCreamOS gives each phone a letter,
+  so the counter phone prints A1, A2, … and the window phone B1, B2, …. Two
+  phones billing at the same moment never hand out the same token. A phone
+  prints plain numbers until its first sync.
+- **Sales shows every phone.** Other phones' bills appear with the phone's
+  name, and the day's totals cover all phones, with this phone's share
+  underneath.
+- **Any phone can edit any bill.** Void, restore, change date or change
+  payment works on another phone's bill too. If two phones edit the same bill,
+  the later edit wins.
+- **One menu and one set of shop details.** A change made on any phone reaches
+  the others on their next sync. The first phone to sync shares its menu and
+  shop details; every other phone takes them, and keeps its previous menu in
+  `menu.backup.json`. If two phones change the menu at the same time, the
+  first change to reach IceCreamOS is kept and Settings says so. The printer
+  address stays per phone.
+
+A phone sees the others' bills and changes when it syncs: after each sale,
+when the till or Sales opens, and every five minutes.
+
 ## Limits, on purpose
 
 - Prices are GST-inclusive. If a GSTIN is set, the bill says "Prices are
