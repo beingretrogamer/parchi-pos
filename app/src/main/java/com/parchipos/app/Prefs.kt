@@ -78,5 +78,36 @@ object Prefs {
         return n
     }
 
+    // ── Cloud sync ──────────────────────────────────────────────────────
+
+    const val DEF_SERVER = "https://icecreamos.sagatheretro.workers.dev"
+
+    /** IceCreamOS, and this phone's key from its Settings → Parchi POS. No key, no sync. */
+    fun serverUrl(c: Context): String = p(c).getString("serverUrl", DEF_SERVER)!!.trim().trimEnd('/')
+    fun syncKey(c: Context): String = p(c).getString("syncKey", "")!!.trim()
+
+    /** True if the server or key changed, so the caller can resend everything. */
+    fun saveSync(c: Context, url: String, key: String): Boolean {
+        val newUrl = url.trim().trimEnd('/').ifEmpty { DEF_SERVER }
+        val changed = newUrl != serverUrl(c) || key.trim() != syncKey(c)
+        p(c).edit().putString("serverUrl", newUrl).putString("syncKey", key.trim()).apply()
+        return changed
+    }
+
+    /** What the last sync attempt found, for the Settings status line. */
+    data class SyncStatus(val at: Long, val error: String, val device: String, val counts: String)
+
+    fun syncStatus(c: Context): SyncStatus {
+        val p = p(c)
+        return SyncStatus(p.getLong("syncAt", 0), p.getString("syncError", "")!!, p.getString("syncDevice", "")!!, p.getString("syncCounts", "")!!)
+    }
+
+    fun saveSyncStatus(c: Context, error: String, device: String? = null, counts: String? = null) {
+        val e = p(c).edit().putLong("syncAt", System.currentTimeMillis()).putString("syncError", error)
+        if (device != null) e.putString("syncDevice", device)
+        if (counts != null) e.putString("syncCounts", counts)
+        e.apply()
+    }
+
     private fun p(c: Context) = c.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 }

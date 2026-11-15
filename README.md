@@ -81,6 +81,32 @@ and has nothing listening on a port.
   per item line: date, time, token, bill id, customer, payment, status, item,
   qty, rate, amount and bill total.
 
+## Cloud sync (IceCreamOS)
+
+Every bill can also go to IceCreamOS, where it becomes an ordinary retail sale:
+stock is deducted, and the sale, payment and accounts are booked.
+
+1. In IceCreamOS, open **Settings → Parchi POS → Add phone**. Give the phone a
+   name and pick where its sales take stock from. Copy the key it shows.
+2. On the phone, open **Settings → Cloud sync**, paste the key and press
+   **Sync now**.
+
+Each phone then sends **every bill it holds, old ones included**, and after
+that each new bill and each edit: void, restore, change date, change payment.
+The phone never waits for the internet. Bills rung up offline go out on the
+next sync, which runs after each sale, whenever the till is opened, and every
+five minutes while it is open. Bills not sent yet show **↑ not synced** in
+**Sales**.
+
+In IceCreamOS, a bill posts once each item name on it is linked to a
+material. **Settings → Parchi POS** lists the unlinked names, the bills that
+could not post (usually not enough stock), and a day-by-day check of what
+each phone rang up against what reached the books.
+
+Use one key per phone. To move a phone to a new key, press **New key** on that
+phone's entry rather than adding the phone again, or its history arrives a
+second time as another phone's.
+
 ## Limits, on purpose
 
 - Prices are GST-inclusive. If a GSTIN is set, the bill says "Prices are
@@ -88,8 +114,8 @@ and has nothing listening on a port.
   no GST rate.
 - Printers' built-in code pages have no ₹ and no Devanagari. ₹ prints as
   `Rs.`, and other non-ASCII text prints as `?`, so give items English names.
-- Data lives only on this phone. Export now and then. Uninstalling the app
-  deletes the sales.
+- Without cloud sync, data lives only on this phone, so export now and then.
+  Uninstalling the app deletes the sales, including any not yet synced.
 
 ## Install
 

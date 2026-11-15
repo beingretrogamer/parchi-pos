@@ -69,8 +69,16 @@ class SalesActivity : Activity() {
         load()
     }
 
+    /** uids of bills IceCreamOS has not got in their current state; empty when sync is off. */
+    private var unsynced: Set<String> = emptySet()
+
     private fun load() {
         sales = Sales.forDay(this, SimpleDateFormat("yyyyMMdd", Locale.US).format(day.time)).sortedByDescending { it.time }
+        // load() follows every edit here, so this is also what sends one.
+        if (Sync.configured(this)) {
+            unsynced = Sync.pending(this).map { it.uid }.toSet()
+            Sync.kick(this)
+        }
         dayLabel.text = if (isToday()) getString(R.string.today) else SimpleDateFormat("EEE, d MMM yyyy", Locale.getDefault()).format(day.time)
 
         val live = sales.filterNot { it.voided }
@@ -106,7 +114,8 @@ class SalesActivity : Activity() {
         }
         val time = SimpleDateFormat("HH:mm", Locale.US).format(Date(s.time))
         row.addView(text("#${s.token}", 16f, bold = true), LinearLayout.LayoutParams(dp(52), LinearLayout.LayoutParams.WRAP_CONTENT))
-        val desc = listOf(time, getString(R.string.n_items, s.itemCount), s.payment, s.customer)
+        val desc = listOf(time, getString(R.string.n_items, s.itemCount), s.payment, s.customer,
+            if (s.uid in unsynced) getString(R.string.not_synced) else "")
             .filter { it.isNotBlank() }.joinToString("  ·  ")
         row.addView(text(desc, 14f, colour = R.color.ink_soft), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         row.addView(text(MainActivity.rs(s.total), 16f, bold = true).apply { gravity = Gravity.END },

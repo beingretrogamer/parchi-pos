@@ -16,6 +16,10 @@ import android.widget.ImageView
 import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
+import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.concurrent.thread
 
 /** Printer address, what the bill says at the top and bottom, and the print log. */
@@ -33,6 +37,9 @@ class SettingsActivity : Activity() {
     private lateinit var gstin: EditText
     private lateinit var footer: EditText
     private lateinit var logView: TextView
+    private lateinit var syncKey: EditText
+    private lateinit var serverUrl: EditText
+    private lateinit var syncStatus: TextView
 
     private val ui = Handler(Looper.getMainLooper())
 
@@ -53,6 +60,12 @@ class SettingsActivity : Activity() {
         gstin = findViewById(R.id.gstin)
         footer = findViewById(R.id.footer)
         logView = findViewById(R.id.logView)
+        syncKey = findViewById(R.id.syncKey)
+        serverUrl = findViewById(R.id.serverUrl)
+        syncStatus = findViewById(R.id.syncStatus)
+        syncKey.setText(Prefs.syncKey(this))
+        serverUrl.setText(Prefs.serverUrl(this))
+        findViewById<Button>(R.id.btnSyncNow).setOnClickListener { syncNow() }
 
         val shop = Prefs.shop(this)
         printerIp.setText(Prefs.printerIp(this))
@@ -85,6 +98,7 @@ class SettingsActivity : Activity() {
     override fun onResume() {
         super.onResume()
         logView.text = PrintLog.text().ifEmpty { getString(R.string.no_activity) }
+        renderSync()
     }
 
     /** Leaving with Back keeps what was typed — losing it would be the surprise. */
@@ -115,6 +129,7 @@ class SettingsActivity : Activity() {
         if (!looksLikeHost(ip)) { if (!quiet) toast(getString(R.string.bad_ip)); return false }
         if (port !in 1..65535) { if (!quiet) toast(getString(R.string.bad_port)); return false }
         Prefs.save(this, ip, port, readShop())
+        if (Prefs.saveSync(this, serverUrl.text.toString(), syncKey.text.toString())) Sync.forget(this)
         if (!quiet) toast(getString(R.string.toast_saved))
         return true
     }
@@ -159,6 +174,39 @@ class SettingsActivity : Activity() {
             }
         }
     }
+
+    private fun syncNow() {
+        if (!save(quiet = true)) return
+        if (!Sync.configured(this)) { renderSync(); return }
+        syncStatus.text = getString(R.string.sync_started)
+        Sync.kick(this) { ui.post { if (!isFinishing) renderSync() } }
+    }
+
+    private fun renderSync() {
+        if (!Sync.configured(this)) { syncStatus.text = getString(R.string.sync_off); return }
+        thread {
+            val total = Sales.all(this).size
+            val waiting = Sync.pending(this).size
+            val st = Prefs.syncStatus(this)
+            val lines = mutableListOf(
+                if (waiting == 0) getString(R.string.sync_all_sent, total) else getString(R.string.sync_waiting, waiting, total),
+            )
+            if (st.at > 0) lines += getString(R.string.sync_last, SimpleDateFormat("d MMM, HH:mm", Locale.getDefault()).format(Date(st.at)))
+            if (st.error.isNotEmpty()) lines += getString(R.string.sync_error, st.error)
+            serverCounts(st.counts).takeIf { it.isNotEmpty() }?.let { lines += getString(R.string.sync_server, st.device, it) }
+            ui.post { if (!isFinishing) syncStatus.text = lines.joinToString("\n") }
+        }
+    }
+
+    /** {"POSTED":120,"UNMAPPED":3} → "120 posted, 3 need item links in IceCreamOS". */
+    private fun serverCounts(json: String): String = try {
+        val o = JSONObject(json)
+        val words = mapOf(
+            "POSTED" to "posted", "VOIDED" to "voided", "UNMAPPED" to "need item links",
+            "BLOCKED" to "can't post (stock?)", "PENDING" to "queued", "POSTING" to "posting",
+        )
+        words.keys.filter { o.optInt(it) > 0 }.joinToString(", ") { "${o.getInt(it)} ${words[it]}" }
+    } catch (_: Exception) { "" }
 
     private fun appVersion(): String = try {
         packageManager.getPackageInfo(packageName, 0).versionName ?: "?"

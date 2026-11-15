@@ -8,6 +8,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 data class SaleLine(
     val name: String,
@@ -27,6 +28,13 @@ data class Sale(
     val payment: String,
     val customer: String,
     val voided: Boolean = false,
+    /**
+     * Never changes, unlike [id], which follows the bill to a new day. It is
+     * how IceCreamOS tells this sale apart from every other phone's.
+     */
+    val uid: String = UUID.randomUUID().toString(),
+    /** Bumped by every edit (void, payment, date); the cloud keeps the newest state. */
+    val updatedAt: Long = System.currentTimeMillis(),
 ) {
     val total: Double get() = lines.sumOf { it.amount }
     val itemCount: Int get() = lines.sumOf { it.qty }
@@ -53,23 +61,29 @@ object Sales {
     fun all(c: Context): List<Sale> {
         val f = File(c.filesDir, FILE)
         if (!f.exists()) return emptyList()
-        return f.readLines().mapNotNull { line ->
+        val sales = f.readLines().mapNotNull { line ->
             // One damaged line should cost one sale, not the whole history.
             if (line.isBlank()) null else try { fromJson(JSONObject(line)) } catch (_: Exception) { null }
         }
+        // Sales from before cloud sync have no uid. Give them one once and
+        // write it down, so every later read (and sync) sees the same one.
+        if (sales.none { it.uid.isEmpty() }) return sales
+        val fixed = sales.map { if (it.uid.isEmpty()) it.copy(uid = UUID.randomUUID().toString()) else it }
+        rewrite(c, fixed)
+        return fixed
     }
 
     fun forDay(c: Context, day: String): List<Sale> = all(c).filter { it.day == day }
 
     @Synchronized
     fun setVoided(c: Context, id: String, voided: Boolean) {
-        rewrite(c, all(c).map { if (it.id == id) it.copy(voided = voided) else it })
+        rewrite(c, all(c).map { if (it.id == id) it.copy(voided = voided, updatedAt = System.currentTimeMillis()) else it })
     }
 
     /** For a bill rung up as Cash that was paid by UPI, or the other way round. */
     @Synchronized
     fun setPayment(c: Context, id: String, payment: String) {
-        rewrite(c, all(c).map { if (it.id == id) it.copy(payment = payment) else it })
+        rewrite(c, all(c).map { if (it.id == id) it.copy(payment = payment, updatedAt = System.currentTimeMillis()) else it })
     }
 
     private fun rewrite(c: Context, sales: List<Sale>) {
@@ -101,6 +115,7 @@ object Sales {
             id = SimpleDateFormat("yyMMdd", Locale.US).format(Date(time)) + "-" + token.toString().padStart(3, '0'),
             token = token,
             time = time,
+            updatedAt = System.currentTimeMillis(),
         )
         rewrite(c, all.map { if (it.id == id) moved else it })
         return moved
@@ -136,6 +151,7 @@ object Sales {
             .put("id", s.id).put("token", s.token).put("time", s.time)
             .put("payment", s.payment).put("customer", s.customer)
             .put("voided", s.voided).put("lines", lines)
+            .put("uid", s.uid).put("updatedAt", s.updatedAt)
     }
 
     private fun fromJson(o: JSONObject): Sale {
@@ -147,6 +163,8 @@ object Sales {
         return Sale(
             o.getString("id"), o.getInt("token"), o.getLong("time"), lines,
             o.optString("payment", "CASH"), o.optString("customer", ""), o.optBoolean("voided", false),
+            uid = o.optString("uid", ""),
+            updatedAt = o.optLong("updatedAt", o.getLong("time")),
         )
     }
 }

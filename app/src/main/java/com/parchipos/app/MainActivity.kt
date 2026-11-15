@@ -7,6 +7,8 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Typeface
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.Editable
 import android.text.TextUtils
 import android.text.TextWatcher
@@ -80,6 +82,15 @@ class MainActivity : Activity() {
      * Keeping it across bills once put a following day's sales on the old date.
      */
     private var billDay: Long? = null
+
+    private val ui = Handler(Looper.getMainLooper())
+    /** Catches up bills rung up while offline, for as long as the till is open. */
+    private val syncTick = object : Runnable {
+        override fun run() {
+            Sync.kick(this@MainActivity)
+            ui.postDelayed(this, SYNC_EVERY_MS)
+        }
+    }
     /** Views padded with side_padding, which the layout only reads once; see onConfigurationChanged. */
     private val sidePadded = ArrayList<View>()
 
@@ -134,6 +145,11 @@ class MainActivity : Activity() {
         if (cart.isEmpty()) billDay = null
     }
 
+    override fun onPause() {
+        super.onPause()
+        ui.removeCallbacks(syncTick)
+    }
+
     /** Sales' "add a missed bill" lands here with the day it was showing. */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -154,6 +170,8 @@ class MainActivity : Activity() {
         renderCategories()
         renderGrid()
         renderCart()
+        ui.removeCallbacks(syncTick)
+        syncTick.run()
     }
 
     /** Declared in the manifest so a rotation keeps the cart; only the grid reflows. */
@@ -516,6 +534,7 @@ class MainActivity : Activity() {
             return
         }
         clearCart()
+        Sync.kick(this)
         if (!printSlips) {
             Toast.makeText(this, getString(R.string.toast_sale_saved, token), Toast.LENGTH_LONG).show()
             return
@@ -576,6 +595,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val ROW_DP = 48
+        private const val SYNC_EVERY_MS = 5 * 60 * 1000L
         /** Midnight of a past day to bill, from Sales' "add a missed bill". */
         const val EXTRA_BILL_DAY = "billDay"
 
