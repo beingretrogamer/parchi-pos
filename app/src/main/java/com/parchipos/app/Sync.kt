@@ -83,21 +83,21 @@ object Sync {
         return ""
     }
 
-    /** Nothing to send: still ask the server what it holds, so Settings shows its counts. */
+    /**
+     * Nothing to send: an empty batch still gets the server's counts for
+     * Settings, and lets the server spend the request posting this phone's
+     * queued or parked bills — so a backlog drains on the five-minute timer.
+     */
     private fun refreshStatus(c: Context) {
-        try {
-            val conn = (URL(Prefs.serverUrl(c) + "/api/pos-sync/status").openConnection() as HttpURLConnection).apply {
-                connectTimeout = 10000; readTimeout = 15000
-                setRequestProperty("Authorization", "Bearer " + Prefs.syncKey(c))
-            }
-            val code = conn.responseCode
-            if (code == 401) { fail(c, "Key not recognised — check it in IceCreamOS"); return }
-            val res = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-            conn.disconnect()
-            Prefs.saveSyncStatus(c, "", res.optString("device"), res.optJSONObject("counts")?.toString() ?: "")
+        val (code, text) = try {
+            post(Prefs.serverUrl(c) + "/api/pos-sync/bills", Prefs.syncKey(c), "{\"bills\":[]}")
         } catch (e: Exception) {
-            fail(c, "Offline or server unreachable (${e.javaClass.simpleName})")
+            fail(c, "Offline or server unreachable (${e.javaClass.simpleName})"); return
         }
+        if (code == 401) { fail(c, "Key not recognised — check it in IceCreamOS"); return }
+        if (code !in 200..299) { fail(c, "Server error $code"); return }
+        val res = try { JSONObject(text) } catch (_: Exception) { fail(c, "Unexpected reply from server"); return }
+        Prefs.saveSyncStatus(c, "", res.optString("device"), res.optJSONObject("counts")?.toString() ?: "")
     }
 
     private fun fail(c: Context, msg: String): String {
