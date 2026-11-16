@@ -87,8 +87,7 @@ class MainActivity : Activity() {
     /** Catches up bills rung up while offline, for as long as the till is open. */
     private val syncTick = object : Runnable {
         override fun run() {
-            // Another phone's menu change shows up without leaving the till.
-            Sync.kick(this@MainActivity) { ui.post { if (!isFinishing) reloadMenu() } }
+            Sync.kick(this@MainActivity)
             ui.postDelayed(this, SYNC_EVERY_MS)
         }
     }

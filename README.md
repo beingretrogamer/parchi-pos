@@ -124,14 +124,11 @@ Once synced, the phones work as one till:
 - **Any phone can edit any bill.** Void, restore, change date or change
   payment works on another phone's bill too. If two phones edit the same bill,
   the later edit wins.
-- **One menu and one set of shop details.** A change made on any phone reaches
-  the others on their next sync. The first phone to sync shares its menu and
-  shop details; every other phone takes them, and keeps its previous menu in
-  `menu.backup.json`. If two phones change the menu at the same time, the
-  first change to reach IceCreamOS is kept and Settings says so. The printer
-  address stays per phone.
 
-A phone sees the others' bills and changes when it syncs: after each sale,
+Each phone still keeps its own menu and shop details for now; a menu managed
+in IceCreamOS is next.
+
+A phone sees the others' bills and edits when it syncs: after each sale,
 when the till or Sales opens, and every five minutes.
 
 ## Limits, on purpose

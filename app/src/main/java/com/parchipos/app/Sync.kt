@@ -22,8 +22,6 @@ import kotlin.concurrent.thread
  *    phones edited here go the same way; IceCreamOS keeps the newest state.
  * 2. Pulls the feed of bills changed since last time, from every phone, into
  *    sales.jsonl. Sales then shows all phones, and any phone can edit any bill.
- * 3. Syncs the shared menu and shop details: sends this phone's change, or
- *    takes the other phones'.
  *
  * What has been sent is kept apart in synced.json (uid → updatedAt sent).
  */
@@ -60,17 +58,16 @@ object Sync {
     }
 
     private fun runOnce(c: Context): String = try {
-        val versions = pushBills(c)
+        pushBills(c)
         pullFeed(c)
-        syncShared(c, versions)
         Prefs.saveSyncStatus(c, "")
         ""
     } catch (e: SyncError) {
         fail(c, e.message ?: "Sync failed")
     }
 
-    /** Step 1. Returns the shared docs' versions from the last reply. */
-    private fun pushBills(c: Context): JSONObject {
+    /** Step 1. */
+    private fun pushBills(c: Context) {
         val url = Prefs.serverUrl(c) + "/api/pos-sync/bills"
         var last: JSONObject? = null
         while (true) {
@@ -99,7 +96,6 @@ object Sync {
             last = res
             if (batch.isEmpty()) break
         }
-        return last?.optJSONObject("shared") ?: JSONObject()
     }
 
     /** Step 2: every phone's bills changed since the cursor. */
@@ -143,59 +139,20 @@ object Sync {
         )
     }
 
-    /** Step 3: the shared menu and shop details. */
-    private fun syncShared(c: Context, versions: JSONObject) {
-        var docs: JSONObject? = null
-        for (key in listOf("menu", "settings")) {
-            val local = Prefs.sharedVersion(c, key)
-            val server = versions.optInt(key, 0)
-            // The first phone to sync seeds a doc no phone has shared yet.
-            if (Prefs.sharedDirty(c, key) || server == 0) {
-                val json = localJson(c, key)
-                val res = try { call(c, "PUT", Prefs.serverUrl(c) + "/api/pos-sync/shared",
-                    JSONObject().put("key", key).put("baseVersion", if (server == 0) 0 else local).put("json", json).toString())
-                } catch (e: Conflict) {
-                    // Another phone changed it first: theirs stands, this phone takes it.
-                    e.body.optString("json").takeIf { it.isNotEmpty() && it != "null" }?.let { applyLocal(c, key, it) }
-                    Prefs.setSharedVersion(c, key, e.body.optInt("version"))
-                    Prefs.setSharedDirty(c, key, false)
-                    Prefs.setSyncNote(c, c.getString(R.string.sync_conflict, if (key == "menu") "The menu" else "Shop details"))
-                    continue
-                }
-                Prefs.setSharedVersion(c, key, res.optInt("version"))
-                // Edited again while this was being sent: leave it to go next time.
-                if (localJson(c, key) == json) Prefs.setSharedDirty(c, key, false)
-            } else if (server != local) {
-                val d = docs ?: call(c, "GET", Prefs.serverUrl(c) + "/api/pos-sync/shared", null).also { docs = it }
-                val doc = d.optJSONObject(key) ?: continue
-                val json = doc.optString("json")
-                if (json.isNotEmpty() && json != "null" && applyLocal(c, key, json)) Prefs.setSharedVersion(c, key, doc.optInt("version"))
-            }
-        }
-    }
-
-    private fun localJson(c: Context, key: String) = if (key == "menu") Menu.sharedJson(c) else Prefs.shopJson(c)
-    private fun applyLocal(c: Context, key: String, json: String) =
-        if (key == "menu") Menu.applyShared(c, json) else Prefs.applyShopJson(c, json)
-
     /** This phone's token letter, which IceCreamOS hands out on the first sync. New bills carry it. */
     private fun absorb(c: Context, res: JSONObject) {
         val letter = res.optString("letter", "")
         if (letter.isNotEmpty() && letter != Prefs.letter(c)) Prefs.setLetter(c, letter)
     }
 
-    private class Conflict(val body: JSONObject) : Exception("conflict")
-
-    /** One request with this phone's key; throws SyncError on anything but 2xx (Conflict for 409). */
+    /** One request with this phone's key; throws SyncError on anything but 2xx. */
     private fun call(c: Context, method: String, url: String, json: String?): JSONObject {
         val (code, text) = try { request(method, url, Prefs.syncKey(c), json) } catch (e: Exception) {
             throw SyncError("Offline or server unreachable (${e.javaClass.simpleName})")
         }
         if (code == 401) throw SyncError("Key not recognised — check it in IceCreamOS")
-        val body = try { JSONObject(text) } catch (_: Exception) { JSONObject() }
-        if (code == 409) throw Conflict(body)
         if (code !in 200..299) throw SyncError("Server error $code")
-        return body
+        return try { JSONObject(text) } catch (_: Exception) { JSONObject() }
     }
 
     private fun fail(c: Context, msg: String): String {
@@ -242,15 +199,14 @@ object Sync {
 
     /**
      * A different key or server is a different device record in IceCreamOS,
-     * which has none of these bills yet: start again from the whole history,
-     * the whole feed, and the shared docs as that server has them.
+     * which has none of these bills yet: start again from the whole history
+     * and the whole feed.
      */
     @Synchronized
     fun forget(c: Context) {
         File(c.filesDir, FILE).delete()
         Prefs.setFeedCursor(c, "")
         Prefs.setLetter(c, "")
-        for (key in listOf("menu", "settings")) Prefs.setSharedVersion(c, key, 0)
     }
 
     @Synchronized

@@ -91,8 +91,6 @@
     <string name="not_synced">↑ not synced</string>
     <string name="day_split_phones">This phone %1$s · other phones %2$s</string>
     <string name="sync_letter">This phone prints tokens as %1$s1, %1$s2, …</string>
-    <string name="sync_conflict">%1$s was changed on another phone at the same time; that version was kept</string>
-    <string name="menu_shared">Shared with every phone through IceCreamOS. A change here reaches the others on their next sync.</string>
     <string name="label_sync">Cloud sync · IceCreamOS</string>
     <string name="label_sync_key">This phone\'s key</string>
     <string name="hint_sync_key">pchk_… from IceCreamOS → Settings → Parchi POS</string>
