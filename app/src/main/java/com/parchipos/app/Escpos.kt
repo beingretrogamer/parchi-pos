@@ -112,10 +112,16 @@ object Escpos {
         }
         b.line("-".repeat(w))
 
+        if (sale.discount > 0) {
+            b.line(row2("Subtotal", Sales.money(sale.subtotal), w))
+            b.line(row2("Discount" + if (sale.discountReason.isNotBlank()) " (${sale.discountReason})" else "", "-" + Sales.money(sale.discount), w))
+        }
         b.bold(true).size(0x01)
             .line(row2("TOTAL (${sale.itemCount} items)", "Rs." + Sales.money(sale.total), w))
             .size(0).bold(false)
-        b.line(row2("Paid: ${sale.payment}", if (shop.gstin.isNotBlank()) "Incl. of GST" else "", w))
+        val paid = if (sale.onCredit) "On credit - to pay" else "Paid: ${sale.payment}"
+        b.line(row2(paid, if (shop.gstin.isNotBlank()) "Incl. of GST" else "", w))
+        if (sale.voided) b.bold(true).line("*** VOID: ${sale.voidReason} ***").bold(false)
 
         b.center()
         wrap(shop.footer.ifBlank { "Thank you! Visit again." }, w).forEach { b.line(it) }
@@ -158,6 +164,28 @@ object Escpos {
         b.line(row2("${sale.itemCount} items", "Bill ${sale.id}", w))
         b.cut()
         return b.bytes()
+    }
+
+    /** Slip for money received from a credit customer, with what they still owe. */
+    fun receipt(shop: Prefs.Shop, r: Receipt, balanceAfter: Double): ByteArray {
+        val w = cols(shop)
+        val b = start(shop).center()
+        if (shop.name.isNotBlank()) b.bold(true).size(0x01).line(shop.name.take(w)).size(0).bold(false)
+        if (shop.phone.isNotBlank()) b.line("Ph: ${shop.phone}")
+        b.bold(true).line("PAYMENT RECEIVED").bold(false)
+        b.left().line("-".repeat(w))
+        b.line(row2("Date", dateTime(r.time), w))
+        b.line(row2("From", r.customer, w))
+        b.line(row2("Mode", r.mode, w))
+        if (r.note.isNotBlank()) wrap("Note: ${r.note}", w).forEach { b.line(it) }
+        b.line("-".repeat(w))
+        b.bold(true).size(0x01).line(row2("RECEIVED", "Rs." + Sales.money(r.amount), w)).size(0).bold(false)
+        if (r.discount > 0) b.line(row2("Discount allowed", "Rs." + Sales.money(r.discount), w))
+        b.line(row2("Balance due", "Rs." + Sales.money(maxOf(0.0, balanceAfter)), w))
+        if (balanceAfter < -0.005) b.line(row2("Advance with us", "Rs." + Sales.money(-balanceAfter), w))
+        if (r.voided) b.bold(true).line("*** VOID: ${r.voidReason} ***").bold(false)
+        b.line("-".repeat(w)).center().line("Thank you!")
+        return b.cut().bytes()
     }
 
     fun test(shop: Prefs.Shop): ByteArray {

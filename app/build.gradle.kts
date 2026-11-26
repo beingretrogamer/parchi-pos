@@ -11,8 +11,8 @@ android {
         applicationId = "com.parchipos.app"
         minSdk = 24          // Android 7 — covers any phone still behind a counter
         targetSdk = 34
-        versionCode = 10
-        versionName = "0.5.0"
+        versionCode = 11
+        versionName = "0.6.0"
     }
 
     /*
@@ -59,4 +59,6 @@ dependencies {
     // Deliberately none. The printer socket is the JDK's own Socket and
     // storage is org.json on files, both part of Android, so there is no
     // dependency tree to age badly on a till that never updates.
+    // Tests only; nothing here goes into the APK.
+    testImplementation("junit:junit:4.13.2")
 }

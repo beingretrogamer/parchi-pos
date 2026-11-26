@@ -39,6 +39,11 @@
             android:text="@string/btn_sales" />
 
         <Button
+            android:id="@+id/btnLedger"
+            style="@style/TopButton"
+            android:text="@string/btn_ledger" />
+
+        <Button
             android:id="@+id/btnMenu"
             style="@style/TopButton"
             android:text="@string/btn_menu" />
@@ -186,6 +191,19 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/btnDiscount"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:background="@drawable/row_bg_plain"
+                android:gravity="center"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:text="@string/btn_discount"
+                android:textColor="@color/accent"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
                 android:id="@+id/btnBillDay"
                 android:layout_width="wrap_content"
                 android:layout_height="36dp"
@@ -222,10 +240,21 @@
                 android:orientation="vertical" />
         </ScrollView>
 
-        <EditText
+        <TextView
+            android:id="@+id/discountLine"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:textColor="@color/accent"
+            android:textSize="13sp"
+            android:visibility="gone" />
+
+        <!-- Suggests customers who already have a credit account, so one person is not two accounts. -->
+        <AutoCompleteTextView
             android:id="@+id/customer"
             style="@style/Field"
             android:layout_marginTop="8dp"
+            android:completionThreshold="1"
             android:hint="@string/hint_customer"
             android:importantForAutofill="no"
             android:inputType="textPersonName|textCapWords" />
@@ -246,6 +275,12 @@
                 style="@style/PayButton"
                 android:layout_marginStart="8dp"
                 android:text="@string/pay_upi" />
+
+            <Button
+                android:id="@+id/payCredit"
+                style="@style/PayButton"
+                android:layout_marginStart="8dp"
+                android:text="@string/pay_credit" />
         </LinearLayout>
 
         <LinearLayout

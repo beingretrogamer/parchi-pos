@@ -61,4 +61,32 @@
         android:hint="@string/hint_note"
         android:importantForAutofill="no"
         android:inputType="textCapSentences" />
+
+    <!-- Custom items only: keep it on the menu so it is one tap next time. -->
+    <LinearLayout
+        android:id="@+id/saveBlock"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <CheckBox
+            android:id="@+id/lineSaveToMenu"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/label_save_to_menu"
+            android:textColor="@color/ink"
+            android:textSize="15sp" />
+
+        <AutoCompleteTextView
+            android:id="@+id/lineCategory"
+            style="@style/Field"
+            android:layout_marginTop="6dp"
+            android:completionThreshold="1"
+            android:hint="@string/hint_menu_category"
+            android:importantForAutofill="no"
+            android:inputType="textCapWords"
+            android:visibility="gone" />
+    </LinearLayout>
 </LinearLayout>

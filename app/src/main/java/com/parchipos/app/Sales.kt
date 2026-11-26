@@ -20,6 +20,9 @@ data class SaleLine(
     val amount: Double get() = price * qty
 }
 
+/** The payment mode of a bill put on the customer's account (udhaar). */
+const val CREDIT = "CREDIT"
+
 data class Sale(
     val id: String,
     val token: Int,
@@ -43,11 +46,21 @@ data class Sale(
     val letter: String = "",
     /** Empty for this phone's own bills; otherwise the name of the phone that rang it up. */
     val phone: String = "",
+    /** Rupees off the whole bill, already worked out from a percent if one was given. */
+    val discount: Double = 0.0,
+    val discountReason: String = "",
+    /** Why it was voided; required when voiding, cleared on restore. */
+    val voidReason: String = "",
 ) {
     /** What the slip and the screen call it: "A12", or "12" without a letter. */
     val label: String get() = letter + token
     val mine: Boolean get() = phone.isEmpty()
-    val total: Double get() = lines.sumOf { it.amount }
+    /** Before the discount. */
+    val subtotal: Double get() = lines.sumOf { it.amount }
+    /** What the customer pays. */
+    val total: Double get() = maxOf(0.0, subtotal - discount)
+    /** On the customer's account rather than paid at the counter; see [Ledger]. */
+    val onCredit: Boolean get() = payment == CREDIT
     val itemCount: Int get() = lines.sumOf { it.qty }
     /** The day it belongs to, as yyyyMMdd — what the Sales screen groups by. */
     val day: String get() = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(time))
@@ -90,8 +103,10 @@ object Sales {
     // across phones, and any phone may edit any phone's bill.
 
     @Synchronized
-    fun setVoided(c: Context, uid: String, voided: Boolean) {
-        rewrite(c, all(c).map { if (it.uid == uid) it.copy(voided = voided, updatedAt = System.currentTimeMillis()) else it })
+    fun setVoided(c: Context, uid: String, voided: Boolean, reason: String = "") {
+        rewrite(c, all(c).map {
+            if (it.uid == uid) it.copy(voided = voided, voidReason = if (voided) reason else "", updatedAt = System.currentTimeMillis()) else it
+        })
     }
 
     /** For a bill rung up as Cash that was paid by UPI, or the other way round. */
@@ -173,14 +188,15 @@ object Sales {
     fun toCsv(sales: List<Sale>): String {
         val date = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val time = SimpleDateFormat("HH:mm", Locale.US)
-        val sb = StringBuilder("date,time,token,bill_id,phone,customer,payment,status,item,note,qty,rate,amount,bill_total\n")
+        val sb = StringBuilder("date,time,token,bill_id,phone,customer,payment,status,void_reason,item,note,qty,rate,amount,bill_discount,discount_reason,bill_total\n")
         for (s in sales) {
             val d = Date(s.time)
             for (l in s.lines) {
                 sb.append(listOf(
                     date.format(d), time.format(d), s.label, s.id, s.phone.ifEmpty { "this phone" }, s.customer, s.payment,
-                    if (s.voided) "VOID" else "OK",
-                    l.name, l.note, l.qty.toString(), money(l.price), money(l.amount), money(s.total),
+                    if (s.voided) "VOID" else "OK", s.voidReason,
+                    l.name, l.note, l.qty.toString(), money(l.price), money(l.amount),
+                    money(s.discount), s.discountReason, money(s.total),
                 ).joinToString(",") { csvCell(it) }).append('\n')
             }
         }
@@ -201,6 +217,8 @@ object Sales {
             .put("voided", s.voided).put("lines", lines)
             .put("uid", s.uid).put("updatedAt", s.updatedAt)
             .put("letter", s.letter).put("phone", s.phone)
+            .put("discount", s.discount).put("discountReason", s.discountReason)
+            .put("voidReason", s.voidReason)
     }
 
     private fun fromJson(o: JSONObject): Sale {
@@ -216,6 +234,9 @@ object Sales {
             updatedAt = o.optLong("updatedAt", o.getLong("time")),
             letter = o.optString("letter", ""),
             phone = o.optString("phone", ""),
+            discount = o.optDouble("discount", 0.0).takeUnless { it.isNaN() } ?: 0.0,
+            discountReason = o.optString("discountReason", ""),
+            voidReason = o.optString("voidReason", ""),
         )
     }
 }

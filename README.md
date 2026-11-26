@@ -52,9 +52,17 @@ and has nothing listening on a port.
 - **Search** filters the whole menu as you type.
 - **+ Custom**, next to the search box, rings up something that isn't on the
   menu. If nothing matches a search, the last tile offers to add what you
-  typed, so only the price is left to fill in.
-- Optionally enter a customer name, pick **Cash** or **UPI**, then press
-  **Print**, which prints the bill and the parchi.
+  typed, so only the price is left to fill in. Tick **Save to menu for next
+  time** (and optionally pick a category) to keep it on the menu as a tile. If
+  the menu already has a single-price item of that name, its price is updated
+  instead of adding a duplicate.
+- **Discount** in the order header takes a percent or a rupee amount off the
+  whole bill, with an optional reason. The bill prints the subtotal, the
+  discount and the total.
+- Optionally enter a customer name, pick **Cash**, **UPI** or **Credit**, then
+  press **Print**, which prints the bill and the parchi.
+- **Credit (udhaar)** puts the bill on the customer's account and needs their
+  name. The name box suggests customers who already have an account.
 - **Save** next to it records the sale without printing either slip. It gets a
   token like any other sale, and you can print it later from **Sales**.
 - **Missed a bill on an earlier day?** In **Sales**, go back to that day and
@@ -63,8 +71,9 @@ and has nothing listening on a port.
   Every new order starts on today again.
 - **Bill on the wrong day?** In **Sales**, tap it and pick **Change date**. It
   moves to that day with the next token there.
-- **Wrong payment mode?** Tap the bill in **Sales** and pick **Change payment
-  to UPI** (or **to Cash**). The day's Cash and UPI split follows.
+- **Wrong payment mode?** Tap the bill in **Sales** and pick **Change
+  payment**, then Cash, UPI or Credit. The day's split and the customer's
+  balance follow.
 - The sale is saved **before** anything prints, and the cart clears straight
   away for the next customer. If the printer is off, the app offers **Retry**.
   The sale is never lost, and you can reprint it later from **Sales**.
@@ -73,13 +82,37 @@ and has nothing listening on a port.
 
 - Shows the day's total, the cash/UPI split, item-wise quantities, and every
   bill. Use ‹ › to move between days.
-- Tap a bill to reprint the bill, the parchi or both, or to **void** it. A
-  voided bill stays listed, struck through, and is left out of the totals.
+- The summary also shows sales on credit, discounts given, and dues
+  collected that day, split by Cash and UPI.
+- Tap a bill to reprint the bill, the parchi or both, or to **void** it.
+  Voiding asks for a reason and will not go ahead without one. A voided bill
+  stays listed, struck through, with its reason, and is left out of the
+  totals.
+
+## Dues (credit accounts)
+
+- **Dues** at the top of the till lists every credit customer and what they
+  owe, largest first, with the total outstanding.
+- Tap a customer for their statement: each credit bill (+) and payment (−),
+  with the balance after each.
+- **Receive payment** records money against the balance. The amount starts at
+  the full balance, so settling up is one tap. Pick Cash or UPI and add a note
+  if needed. A **discount allowed** (for example, rounding 1,005 down to
+  1,000) also reduces the balance. Afterwards you can print a receipt slip
+  that shows the balance left.
+- Tap a payment to reprint its receipt, or to void it. Voiding needs a reason
+  and puts the amount back on the balance.
+- **Share statement** sends the account as plain text to WhatsApp.
+- Balances are always worked out from the bills and payments, so voiding a
+  credit bill or changing its payment mode corrects the balance by itself.
+  Payments received are kept on this phone only and are not sent by cloud
+  sync.
 - **Share summary** sends a plain-text summary to WhatsApp or similar.
 - **Export day** and **Export all sales** save a CSV through the system's
   Save dialog, so you can put it in Downloads or Drive. The CSV has one row
-  per item line: date, time, token, bill id, customer, payment, status, item,
-  qty, rate, amount and bill total.
+  per item line: date, time, token, bill id, customer, payment, status, void
+  reason, item, qty, rate, amount, bill discount, discount reason and bill
+  total.
 
 ## Cloud sync (IceCreamOS)
 
