@@ -139,6 +139,12 @@ names, any bill that could not post (for example a made-to-order item with
 no recipe), and a day-by-day check of what each phone rang up against what
 reached the books.
 
+A bill discount is booked as charged: the lines are reduced in proportion, so
+IceCreamOS's total and GST match the bill. **Credit (udhaar) bills are not
+booked in IceCreamOS yet**: they reach it and are held, and Dues on the phone
+remains the record of what each customer owes. Payments taken in Dues are not
+sent yet either.
+
 Use one key per phone. To move a phone to a new key, press **New key** on that
 phone's entry rather than adding the phone again, or its history arrives a
 second time as another phone's.

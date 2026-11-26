@@ -209,6 +209,7 @@ class SettingsActivity : Activity() {
         val words = mapOf(
             "POSTED" to "posted", "VOIDED" to "voided", "UNMAPPED" to "need item links",
             "BLOCKED" to "can't post", "PENDING" to "queued", "POSTING" to "posting",
+            "HELD" to "on credit (kept in Dues, not booked yet)",
         )
         words.keys.filter { o.optInt(it) > 0 }.joinToString(", ") { "${o.getInt(it)} ${words[it]}" }
     } catch (_: Exception) { "" }
