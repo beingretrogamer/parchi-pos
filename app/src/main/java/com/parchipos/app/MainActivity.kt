@@ -16,8 +16,12 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.widget.ArrayAdapter
+import android.widget.AutoCompleteTextView
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.RadioGroup
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
@@ -46,8 +50,8 @@ class MainActivity : Activity() {
     private class CartLine(
         /** Item id plus variant, so Half and Full momos are separate lines. */
         val key: String,
-        /** Null for a custom item typed in at the counter. */
-        val itemId: String?,
+        /** Null for a custom item typed in at the counter, until it is saved to the menu. */
+        var itemId: String?,
         var name: String,
         var price: Double,
         var qty: Int,
@@ -64,9 +68,12 @@ class MainActivity : Activity() {
     private lateinit var cartTitle: TextView
     private lateinit var cartScroll: ScrollView
     private lateinit var cartLines: LinearLayout
-    private lateinit var customer: EditText
+    private lateinit var customer: AutoCompleteTextView
     private lateinit var payCash: Button
     private lateinit var payUpi: Button
+    private lateinit var payCredit: Button
+    private lateinit var btnDiscount: TextView
+    private lateinit var discountLine: TextView
     private lateinit var btnCharge: Button
     private lateinit var btnBillDay: TextView
 
@@ -75,6 +82,10 @@ class MainActivity : Activity() {
     private val cart = LinkedHashMap<String, CartLine>()
     private var category: String? = null
     private var payment = "CASH"
+    /** Percent off the bill, or null when the discount is a flat amount in [discountFlat]. */
+    private var discountPct: Double? = null
+    private var discountFlat = 0.0
+    private var discountReason = ""
     /**
      * Midnight of a past day when ringing up a bill that was missed, else null
      * for now. It belongs to the one order: cleared with the cart, and when the
@@ -113,6 +124,9 @@ class MainActivity : Activity() {
         customer = findViewById(R.id.customer)
         payCash = findViewById(R.id.payCash)
         payUpi = findViewById(R.id.payUpi)
+        payCredit = findViewById(R.id.payCredit)
+        btnDiscount = findViewById(R.id.btnDiscount)
+        discountLine = findViewById(R.id.discountLine)
         btnCharge = findViewById(R.id.btnCharge)
         btnBillDay = findViewById(R.id.btnBillDay)
         btnBillDay.setOnClickListener { if (billDay != null) setBillDay(null) else pickBillDay() }
@@ -123,6 +137,13 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.btnSettings).setOnClickListener { open(SettingsActivity::class.java) }
         payCash.setOnClickListener { payment = "CASH"; renderPayment() }
         payUpi.setOnClickListener { payment = "UPI"; renderPayment() }
+        payCredit.setOnClickListener {
+            payment = CREDIT
+            renderPayment()
+            if (customer.text.isBlank()) { customer.requestFocus(); customer.showDropDown() }
+        }
+        btnDiscount.setOnClickListener { editDiscount() }
+        findViewById<Button>(R.id.btnLedger).setOnClickListener { open(LedgerActivity::class.java) }
         findViewById<View>(R.id.btnClear).setOnClickListener { clearCart() }
         findViewById<Button>(R.id.btnCustom).setOnClickListener { editLine(null, query()) }
         search.addTextChangedListener(object : TextWatcher {
@@ -174,6 +195,7 @@ class MainActivity : Activity() {
         // and a menu change mid-order should not reprice what was agreed.
         menu = Menu.all(this)
         if (category != null && menu.none { it.category == category }) category = null
+        customer.setAdapter(ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, Ledger.names(this)))
 
         renderCategories()
         renderGrid()
@@ -388,8 +410,14 @@ class MainActivity : Activity() {
             height = dp((minOf(cart.size.toFloat(), maxRows) * ROW_DP).toInt())
         }
 
-        val total = cart.values.sumOf { it.price * it.qty }
+        val subtotal = cart.values.sumOf { it.price * it.qty }
+        val off = discountAmount(subtotal)
+        val total = subtotal - off
         val count = cart.values.sumOf { it.qty }
+        discountLine.visibility = if (off > 0) View.VISIBLE else View.GONE
+        discountLine.text = getString(R.string.discount_applied, rs(subtotal), rs(off),
+            discountPct?.let { " (" + Sales.money(it).removeSuffix(".00") + "%)" } ?: "", discountReason)
+        btnDiscount.text = if (off > 0) getString(R.string.btn_discount_on, rs(off)) else getString(R.string.btn_discount)
         cartTitle.text = getString(R.string.cart_title, count)
         val day = billDay
         btnCharge.text = if (day == null) getString(R.string.btn_charge, count, rs(total))
@@ -410,7 +438,8 @@ class MainActivity : Activity() {
     }
 
     private fun renderPayment() {
-        listOf(payCash to "CASH", payUpi to "UPI").forEach { (b, mode) ->
+        customer.hint = getString(if (payment == CREDIT) R.string.hint_customer_credit else R.string.hint_customer)
+        listOf(payCash to "CASH", payUpi to "UPI", payCredit to CREDIT).forEach { (b, mode) ->
             val on = payment == mode
             b.setBackgroundResource(if (on) R.drawable.btn_primary else R.drawable.btn_secondary)
             b.setTextColor(if (on) getColor(R.color.on_accent) else getColor(R.color.ink))
@@ -448,6 +477,15 @@ class MainActivity : Activity() {
         qty.setText((line?.qty ?: 1).toString())
         note.setText(line?.note ?: "")
 
+        // Custom items can be kept on the menu, so they are not typed in again next time.
+        val custom = line == null || line.itemId == null
+        val saveBox = form.findViewById<CheckBox>(R.id.lineSaveToMenu)
+        val saveCategory = form.findViewById<AutoCompleteTextView>(R.id.lineCategory)
+        form.findViewById<View>(R.id.saveBlock).visibility = if (custom) View.VISIBLE else View.GONE
+        saveCategory.setAdapter(ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, Menu.categories(this)))
+        saveCategory.setText(category ?: "")
+        saveBox.setOnCheckedChangeListener { _, on -> saveCategory.visibility = if (on) View.VISIBLE else View.GONE }
+
         val builder = AlertDialog.Builder(this)
             .setTitle(if (line == null) R.string.custom_item_title else R.string.edit_line)
             .setView(form)
@@ -474,6 +512,10 @@ class MainActivity : Activity() {
                     target.qty = q
                     target.note = note.text.toString().trim()
                     if (q == 0) cart.remove(target.key)
+                    if (custom && saveBox.isChecked) {
+                        target.itemId = saveToMenu(n, p, saveCategory.text.toString().trim())
+                        reloadMenu()
+                    }
                     dialog.dismiss()
                     renderGrid()
                     renderCart()
@@ -484,9 +526,90 @@ class MainActivity : Activity() {
         (if (line == null && prefill.isEmpty()) name else price).requestFocus()
     }
 
+    /**
+     * Adds a custom item to the menu, or updates the price of a single-price
+     * item of the same name, so the same dish is never on the menu twice.
+     * Returns its menu id.
+     */
+    private fun saveToMenu(name: String, price: Double, cat: String): String {
+        val same = Menu.all(this).find { it.name.equals(name, ignoreCase = true) && it.variants.isEmpty() }
+        val item = MenuItem(same?.id ?: Menu.newId(), name, price, cat.ifBlank { same?.category ?: "" })
+        Menu.upsert(this, item)
+        Toast.makeText(this, getString(R.string.toast_saved_to_menu, name), Toast.LENGTH_SHORT).show()
+        return item.id
+    }
+
+    private fun discountAmount(subtotal: Double): Double {
+        val raw = discountPct?.let { subtotal * it / 100 } ?: discountFlat
+        return Math.round(raw.coerceIn(0.0, subtotal) * 100) / 100.0
+    }
+
+    /** Percent or rupees off the whole bill. Setting it to 0 removes it. */
+    private fun editDiscount() {
+        val form = layoutInflater.inflate(R.layout.dialog_discount, null)
+        val kind = form.findViewById<RadioGroup>(R.id.discKind)
+        val value = form.findViewById<EditText>(R.id.discValue)
+        val preview = form.findViewById<TextView>(R.id.discPreview)
+        val reason = form.findViewById<EditText>(R.id.discReason)
+        val subtotal = cart.values.sumOf { it.price * it.qty }
+        if (discountPct == null && discountFlat > 0) kind.check(R.id.discRupees)
+        val current = discountPct ?: discountFlat.takeIf { it > 0 }
+        if (current != null) value.setText(Sales.money(current).removeSuffix(".00"))
+        reason.setText(discountReason)
+
+        fun off(): Double? {
+            val v = value.text.toString().trim().ifEmpty { "0" }.toDoubleOrNull() ?: return null
+            if (v < 0) return null
+            return if (kind.checkedRadioButtonId == R.id.discPercent) {
+                if (v > 100) null else subtotal * v / 100
+            } else if (v > subtotal) null else v
+        }
+        fun refresh() {
+            val o = off()
+            preview.text = if (o == null) getString(R.string.err_discount)
+                else getString(R.string.disc_preview, rs(subtotal), rs(Math.round(o * 100) / 100.0), rs(subtotal - Math.round(o * 100) / 100.0))
+        }
+        value.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) = refresh()
+        })
+        kind.setOnCheckedChangeListener { _, _ -> refresh() }
+        refresh()
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.title_discount)
+            .setView(form)
+            .setPositiveButton(R.string.btn_apply, null)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setNeutralButton(R.string.btn_remove) { _, _ ->
+                discountPct = null; discountFlat = 0.0; discountReason = ""
+                renderCart()
+            }
+            .create()
+        dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
+        dialog.show()
+        value.requestFocus()
+        value.selectAll()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val o = off()
+            val v = value.text.toString().trim().ifEmpty { "0" }.toDoubleOrNull()
+            if (o == null || v == null) { value.error = getString(R.string.err_discount); return@setOnClickListener }
+            if (kind.checkedRadioButtonId == R.id.discPercent) { discountPct = v; discountFlat = 0.0 }
+            else { discountPct = null; discountFlat = v }
+            discountReason = reason.text.toString().trim()
+            if (v == 0.0) { discountPct = null; discountFlat = 0.0; discountReason = "" }
+            dialog.dismiss()
+            renderCart()
+        }
+    }
+
     private fun clearCart() {
         cart.clear()
         billDay = null
+        discountPct = null
+        discountFlat = 0.0
+        discountReason = ""
         customer.setText("")
         search.setText("")
         payment = "CASH"
@@ -498,6 +621,13 @@ class MainActivity : Activity() {
     /** `printSlips = false` records the sale and skips both slips; Sales can print it later. */
     private fun charge(printSlips: Boolean) {
         if (cart.isEmpty()) return
+        val name = customer.text.toString().trim()
+        if (payment == CREDIT && name.isEmpty()) {
+            // A credit bill with no name could never be collected.
+            customer.error = getString(R.string.err_credit_name)
+            customer.requestFocus()
+            return
+        }
         val day = billDay
         val now: Long
         val token: Int
@@ -529,7 +659,9 @@ class MainActivity : Activity() {
             time = now,
             lines = cart.values.map { SaleLine(it.name, it.price, it.qty, it.note) },
             payment = payment,
-            customer = customer.text.toString().trim(),
+            customer = name,
+            discount = discountAmount(cart.values.sumOf { it.price * it.qty }),
+            discountReason = discountReason,
         )
         try {
             Sales.record(this, sale)
@@ -543,8 +675,11 @@ class MainActivity : Activity() {
         }
         clearCart()
         Sync.kick(this)
+        if (sale.onCredit) {
+            Toast.makeText(this, getString(R.string.toast_on_credit, sale.customer, rs(Ledger.balance(this, sale.customer))), Toast.LENGTH_LONG).show()
+        }
         if (!printSlips) {
-            Toast.makeText(this, getString(R.string.toast_sale_saved, sale.label), Toast.LENGTH_LONG).show()
+            if (!sale.onCredit) Toast.makeText(this, getString(R.string.toast_sale_saved, sale.label), Toast.LENGTH_LONG).show()
             return
         }
         Toast.makeText(this, getString(R.string.toast_printing, sale.label), Toast.LENGTH_SHORT).show()

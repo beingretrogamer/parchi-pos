@@ -136,6 +136,9 @@ object Sync {
             letter = letter,
             // A bill this phone rang up is its own, whichever phone edited it last.
             phone = if (me.isNotEmpty() && letter == me) "" else o.optString("phone", "?"),
+            discount = o.optDouble("discount", 0.0).takeUnless { it.isNaN() } ?: 0.0,
+            discountReason = o.optString("discountReason", ""),
+            voidReason = o.optString("voidReason", ""),
         )
     }
 
@@ -191,6 +194,10 @@ object Sync {
         .put("payment", s.payment)
         .put("customer", s.customer)
         .put("voided", s.voided)
+        .put("voidReason", s.voidReason)
+        .put("discount", s.discount)
+        .put("discountReason", s.discountReason)
+        .put("total", s.total)
         .put("lines", JSONArray().apply {
             s.lines.forEach { put(JSONObject().put("name", it.name).put("price", it.price).put("qty", it.qty).put("note", it.note)) }
         })

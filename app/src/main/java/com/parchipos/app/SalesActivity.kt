@@ -86,10 +86,20 @@ class SalesActivity : Activity() {
         dayTotal.text = MainActivity.rs(live.sumOf { it.total })
         val cash = live.filter { it.payment == "CASH" }.sumOf { it.total }
         val upi = live.filter { it.payment == "UPI" }.sumOf { it.total }
+        val credit = live.filter { it.onCredit }.sumOf { it.total }
+        val discount = live.sumOf { it.discount }
         val voided = sales.size - live.size
+        // Dues collected today are money in the drawer, though not today's sales.
+        val dayKey = SimpleDateFormat("yyyyMMdd", Locale.US).format(day.time)
+        val collected = Ledger.receipts(this).filter { !it.voided && SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(it.time)) == dayKey }
         // Every phone's bills arrive through IceCreamOS; say how much was this one's.
         val others = live.filterNot { it.mine }
         daySplit.text = getString(R.string.day_split, live.size, MainActivity.rs(cash), MainActivity.rs(upi)) +
+            (if (credit > 0) "\n" + getString(R.string.day_credit, MainActivity.rs(credit)) else "") +
+            (if (discount > 0) "\n" + getString(R.string.day_discount, MainActivity.rs(discount)) else "") +
+            (if (collected.isNotEmpty()) "\n" + getString(R.string.day_collected,
+                MainActivity.rs(collected.filter { it.mode == "CASH" }.sumOf { it.amount }),
+                MainActivity.rs(collected.filter { it.mode == "UPI" }.sumOf { it.amount })) else "") +
             (if (others.isNotEmpty()) "\n" + getString(R.string.day_split_phones,
                 MainActivity.rs(live.filter { it.mine }.sumOf { it.total }), MainActivity.rs(others.sumOf { it.total })) else "") +
             if (voided > 0) "\n" + getString(R.string.day_voided, voided) else ""
@@ -119,7 +129,10 @@ class SalesActivity : Activity() {
         }
         val time = SimpleDateFormat("HH:mm", Locale.US).format(Date(s.time))
         row.addView(text("#${s.label}", 16f, bold = true), LinearLayout.LayoutParams(dp(60), LinearLayout.LayoutParams.WRAP_CONTENT))
-        val desc = listOf(time, getString(R.string.n_items, s.itemCount), s.payment, s.phone, s.customer,
+        val desc = listOf(time, getString(R.string.n_items, s.itemCount),
+            if (s.onCredit) getString(R.string.pay_credit) else s.payment, s.phone, s.customer,
+            if (s.discount > 0) getString(R.string.disc_short, MainActivity.rs(s.discount)) else "",
+            if (s.voided) getString(R.string.voided_because, s.voidReason) else "",
             if (s.uid in unsynced) getString(R.string.not_synced) else "")
             .filter { it.isNotBlank() }.joinToString("  ·  ")
         row.addView(text(desc, 14f, colour = R.color.ink_soft), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
@@ -138,14 +151,16 @@ class SalesActivity : Activity() {
     }
 
     private fun billActions(s: Sale) {
-        val detail = s.lines.joinToString("\n") { "${it.qty} × ${it.name}   ${MainActivity.rs(it.amount)}" }
+        val detail = s.lines.joinToString("\n") { "${it.qty} × ${it.name}   ${MainActivity.rs(it.amount)}" } +
+            (if (s.discount > 0) "\n" + getString(R.string.discount_line, MainActivity.rs(s.discount), s.discountReason) else "") +
+            (if (s.voided) "\n\n" + getString(R.string.voided_because, s.voidReason) else "")
         val labels = arrayOf(
             getString(R.string.reprint_both),
             getString(R.string.reprint_bill),
             getString(R.string.reprint_parchi),
             getString(if (s.voided) R.string.restore_bill else R.string.void_bill),
             getString(R.string.change_date),
-            getString(R.string.change_payment, if (s.payment == "UPI") getString(R.string.pay_cash) else getString(R.string.pay_upi)),
+            getString(R.string.change_payment_any),
         )
         // A custom title, because a stock one cuts off after two lines and the
         // point is to see what was on the bill before reprinting or voiding it.
@@ -163,12 +178,7 @@ class SalesActivity : Activity() {
                     2 -> reprint(s, bill = false, parchi = true)
                     3 -> confirmVoid(s)
                     4 -> changeDate(s)
-                    5 -> {
-                        val to = if (s.payment == "UPI") "CASH" else "UPI"
-                        Sales.setPayment(this, s.uid, to)
-                        load()
-                        toast(getString(R.string.payment_changed, s.label, to))
-                    }
+                    5 -> changePayment(s)
                 }
             }
             .show()
@@ -207,10 +217,31 @@ class SalesActivity : Activity() {
             load()
             return
         }
+        // A void always needs a reason, kept on the bill, shown in Sales and exported.
+        Dialogs.askReason(this, getString(R.string.void_confirm, s.label, MainActivity.rs(s.total)), getString(R.string.void_bill)) { reason ->
+            Sales.setVoided(this, s.uid, true, reason)
+            load()
+        }
+    }
+
+    /** Cash, UPI or credit. Moving to credit needs a customer name, since that is the account it goes on. */
+    private fun changePayment(s: Sale) {
+        val modes = listOf("CASH", "UPI", CREDIT).filter { it != s.payment }
+        val names = modes.map {
+            when (it) { "CASH" -> getString(R.string.pay_cash); "UPI" -> getString(R.string.pay_upi); else -> getString(R.string.pay_credit) }
+        }.toTypedArray()
         AlertDialog.Builder(this)
-            .setMessage(getString(R.string.void_confirm, s.label, MainActivity.rs(s.total)))
-            .setPositiveButton(R.string.void_bill) { _, _ -> Sales.setVoided(this, s.uid, true); load() }
-            .setNegativeButton(android.R.string.cancel, null)
+            .setTitle(getString(R.string.change_payment_title, s.label))
+            .setItems(names) { _, which ->
+                val to = modes[which]
+                if (to == CREDIT && s.customer.isBlank()) {
+                    toast(getString(R.string.err_credit_needs_name))
+                    return@setItems
+                }
+                Sales.setPayment(this, s.uid, to)
+                load()
+                toast(getString(R.string.payment_changed, s.label, names[which]))
+            }
             .show()
     }
 
@@ -223,6 +254,10 @@ class SalesActivity : Activity() {
             append("Total: ${MainActivity.rs(live.sumOf { it.total })} (${live.size} bills)\n")
             append("Cash: ${MainActivity.rs(live.filter { it.payment == "CASH" }.sumOf { it.total })}\n")
             append("UPI: ${MainActivity.rs(live.filter { it.payment == "UPI" }.sumOf { it.total })}\n")
+            val credit = live.filter { it.onCredit }.sumOf { it.total }
+            if (credit > 0) append("On credit: ${MainActivity.rs(credit)}\n")
+            val discount = live.sumOf { it.discount }
+            if (discount > 0) append("Discounts: ${MainActivity.rs(discount)}\n")
             if (live.isNotEmpty()) {
                 append("\n")
                 itemTotals(live).forEach { (name, qty) -> append("$qty × $name\n") }
