@@ -104,7 +104,7 @@ class SalesActivity : Activity() {
                 MainActivity.rs(live.filter { it.mine }.sumOf { it.total }), MainActivity.rs(others.sumOf { it.total })) else "") +
             if (voided > 0) "\n" + getString(R.string.day_voided, voided) else ""
 
-        dayItems.text = itemTotals(live).joinToString("\n") { (name, qty) -> "${qty.toString().padStart(4)}  $name" }
+        dayItems.text = Summary.itemTotals(sales).joinToString("\n") { (name, qty) -> "${qty.toString().padStart(4)}  $name" }
         dayItems.visibility = if (live.isEmpty()) View.GONE else View.VISIBLE
 
         noBills.visibility = if (sales.isEmpty()) View.VISIBLE else View.GONE
@@ -112,12 +112,6 @@ class SalesActivity : Activity() {
         billList.removeAllViews()
         sales.forEach { billList.addView(billRow(it)) }
     }
-
-    /** Item-wise quantities, bestseller first — what to restock tomorrow. */
-    private fun itemTotals(list: List<Sale>): List<Pair<String, Int>> =
-        list.flatMap { it.lines }.groupBy { it.name }
-            .map { (name, lines) -> name to lines.sumOf { it.qty } }
-            .sortedByDescending { it.second }
 
     private fun billRow(s: Sale): View {
         val row = LinearLayout(this).apply {
@@ -247,22 +241,11 @@ class SalesActivity : Activity() {
 
     /** Plain text, so it pastes into WhatsApp for whoever wasn't at the counter. */
     private fun shareSummary() {
-        val live = sales.filterNot { it.voided }
         val shopName = Prefs.shop(this).name.ifBlank { getString(R.string.app_name) }
-        val text = buildString {
-            append("$shopName — ${dayLabel.text}\n")
-            append("Total: ${MainActivity.rs(live.sumOf { it.total })} (${live.size} bills)\n")
-            append("Cash: ${MainActivity.rs(live.filter { it.payment == "CASH" }.sumOf { it.total })}\n")
-            append("UPI: ${MainActivity.rs(live.filter { it.payment == "UPI" }.sumOf { it.total })}\n")
-            val credit = live.filter { it.onCredit }.sumOf { it.total }
-            if (credit > 0) append("On credit: ${MainActivity.rs(credit)}\n")
-            val discount = live.sumOf { it.discount }
-            if (discount > 0) append("Discounts: ${MainActivity.rs(discount)}\n")
-            if (live.isNotEmpty()) {
-                append("\n")
-                itemTotals(live).forEach { (name, qty) -> append("$qty × $name\n") }
-            }
-        }
+        // Read again rather than trusting the list on screen, so a void made a
+        // moment ago (here or synced from another phone) is always reflected.
+        val dayKey = SimpleDateFormat("yyyyMMdd", Locale.US).format(day.time)
+        val text = Summary.text(shopName, day.timeInMillis, Sales.forDay(this, dayKey), Ledger.receipts(this))
         val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
         startActivity(Intent.createChooser(send, getString(R.string.btn_share_summary)))
     }

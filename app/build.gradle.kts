@@ -59,4 +59,6 @@ dependencies {
     // Deliberately none. The printer socket is the JDK's own Socket and
     // storage is org.json on files, both part of Android, so there is no
     // dependency tree to age badly on a till that never updates.
+    // Tests only; nothing here goes into the APK.
+    testImplementation("junit:junit:4.13.2")
 }
