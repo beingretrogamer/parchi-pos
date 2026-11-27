@@ -91,7 +91,7 @@ object Cloud {
         val me = me(c) ?: return origin
         if (deviceId != null && deviceId == me.deviceId) return ""
         if (deviceId == null && origin.isEmpty()) return "" // from before the cloud: this phone's own
-        return phones(c).find { it.id == deviceId }?.name ?: origin.ifEmpty { "Phone $letter" }
+        return phones(c).find { it.id == deviceId }?.name ?: origin.ifEmpty { "Device $letter" }
     }
 
     // ── invoice numbers ─────────────────────────────────────────────────

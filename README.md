@@ -135,30 +135,30 @@ and has nothing listening on a port.
 
 ## Parchi Cloud
 
-Every phone of a shop shares one set of bills, payments, customers and one
+Every device of a shop shares one set of bills, payments, customers and one
 menu through Parchi Cloud. The till never waits for the internet: a bill is
-saved and printed first, and goes up when the phone is online.
+saved and printed first, and goes up when the device is online.
 
-**Connecting a phone:**
+**Connecting a device:**
 
-1. The owner makes a code in the portal: **Phones → Add a phone**.
-2. On the phone, open **Settings → Parchi Cloud**, type the code and a name
-   for the phone ("Counter"), and press **Connect**.
+1. The owner makes a code in the portal: **Devices → Add a device**.
+2. On the device, open **Settings → Parchi Cloud**, type the code and a name
+   for the device ("Counter"), and press **Connect**.
 
 What happens on connect:
 
-- **Uploads.** This phone's own bills and all its dues payments go up.
-  Bills it saw from other phones (through IceCreamOS) stay where they are;
-  each phone uploads its own.
+- **Uploads.** This device's own bills and all its dues payments go up.
+  Bills it saw from other devices (through IceCreamOS) stay where they are;
+  each device uploads its own.
 - **Its letter.** It keeps its old letter if it's free.
 - **Menu.**
-  - If the account already has a menu, it replaces the phone's. The old one
+  - If the account already has a menu, it replaces the device's. The old one
     is kept in `menu.backup.json`.
   - If the account has none yet, the Parchi Cloud screen offers to upload
-    the phone's menu. That needs an owner's or manager's PIN.
+    the device's menu. That needs an owner's or manager's PIN.
 - **Bill header.** It works the same way as the menu.
 - **Customers.** Every credit name becomes a customer. The id comes from the
-  name, so two phones that know "Ramesh" make the same customer.
+  name, so two devices that know "Ramesh" make the same customer.
 
 From then on:
 
@@ -168,28 +168,28 @@ From then on:
 - **Status dot.** The dot in the till's header is green when everything is
   up. It turns amber with a count when bills are waiting, and red when sync
   has stopped. Tap it for details.
-- **Other phones' bills** appear in Sales, with the phone's name.
-- **Edits on two phones both survive.** A void on one phone and a payment
-  change on another are separate edits. If two phones edit the same thing,
+- **Other devices' bills** appear in Sales, with the device's name.
+- **Edits on two devices both survive.** A void on one device and a payment
+  change on another are separate edits. If two devices edit the same thing,
   the later edit wins.
 - **Invoice numbers.** New bills get one, like `A/26-27/000123`, printed
-  under the token. Each phone has its own series per financial year, so
-  phones never clash, even offline.
+  under the token. Each device has its own series per financial year, so
+  devices never clash, even offline.
 - **Menu and bill header** come from the account and are edited in the
-  portal. Managers will be able to edit them on the phone with their PIN in
+  portal. Managers will be able to edit them on the device with their PIN in
   the next update.
-- **Clock.** Times follow Parchi Cloud's clock, so a phone with a wrong
+- **Clock.** Times follow Parchi Cloud's clock, so a device with a wrong
   clock still files bills on the right day.
-- **History.** A new phone downloads the last 90 days plus every credit bill
+- **History.** A new device downloads the last 90 days plus every credit bill
   and payment. Opening an older day in Sales fetches it.
 
-**Disconnect this phone**, at the bottom of the Parchi Cloud screen, turns it
+**Disconnect this device**, at the bottom of the Parchi Cloud screen, turns it
 back into a till of its own and keeps everything on it. Remove it in the
 portal as well, to free its place on the licence.
 
 ## Cloud sync (IceCreamOS)
 
-*For phones not connected to Parchi Cloud. Connecting a phone to Parchi
+*For devices not connected to Parchi Cloud. Connecting a device to Parchi
 Cloud switches IceCreamOS sync off for it.*
 
 Every bill can also go to IceCreamOS, where it becomes an ordinary retail sale:

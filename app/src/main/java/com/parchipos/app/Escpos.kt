@@ -198,7 +198,7 @@ object Escpos {
             .line(dateTime(System.currentTimeMillis()))
             .line("-".repeat(w))
             .line("If you can read this,")
-            .line("this phone can reach the printer.")
+            .line("this device can reach the printer.")
             .line("$w columns" + if (shop.small) ", small print" else "")
             .line("-".repeat(w))
             .cut()

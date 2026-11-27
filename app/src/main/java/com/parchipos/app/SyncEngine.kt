@@ -98,7 +98,7 @@ object SyncEngine {
             ""
         } catch (e: CloudApi.ApiError) {
             val msg = when {
-                e.status == 401 -> "This phone's key no longer works: it was removed or replaced in Parchi Cloud."
+                e.status == 401 -> "This device's key no longer works: it was removed or replaced in Parchi Cloud."
                 e.status == 403 && e.code == "account_closed" -> "This account is closed. The till keeps working on its own."
                 else -> e.message ?: "Sync failed"
             }
