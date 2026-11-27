@@ -64,3 +64,25 @@ dependencies {
     // Real Android SQLite and org.json on the JVM, for the store and sync tests.
     testImplementation("org.robolectric:robolectric:4.14.1")
 }
+
+/*
+ * Robolectric's Android runtime, fetched by Gradle (with its retries and its
+ * cache) instead of by Robolectric in the middle of a test run, so a flaky
+ * download can never fail a release build. Tests then run Robolectric offline.
+ * Robolectric 4.14 needs both runtimes below; update them with Robolectric.
+ */
+val robolectricRuntime: Configuration by configurations.creating
+dependencies {
+    robolectricRuntime("org.robolectric:android-all-instrumented:14-robolectric-10818077-i7") // SDK 34, the tests' @Config
+    robolectricRuntime("org.robolectric:android-all-instrumented:15-robolectric-12650502-i7") // the newest it knows, which loads the app package
+}
+val robolectricDir = layout.buildDirectory.dir("robolectric-runtime")
+val copyRobolectricRuntime by tasks.registering(Copy::class) {
+    from(robolectricRuntime)
+    into(robolectricDir)
+}
+tasks.withType<Test>().configureEach {
+    dependsOn(copyRobolectricRuntime)
+    systemProperty("robolectric.offline", "true")
+    systemProperty("robolectric.dependency.dir", robolectricDir.get().asFile.absolutePath)
+}
