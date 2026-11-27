@@ -199,6 +199,16 @@ when the till or Sales opens, and every five minutes.
 - Without cloud sync, data lives only on this phone, so export now and then.
   Uninstalling the app deletes the sales, including any not yet synced.
 
+## Where the data lives
+
+Everything is in one SQLite database on the phone, `parchi.db`: bills, dues
+payments and the menu, with every amount in paise (₹45.50 is stored as 4550).
+It is the same shape Parchi Cloud syncs, field for field.
+
+Before 0.6.2 the app kept `sales.jsonl`, `receipts.jsonl` and `menu.json`.
+The first start of 0.6.2 copies them into the database in one go and renames
+them `*.imported`, so they stay on the phone as a backup.
+
 ## Install
 
 **[Download the latest APK](../../releases/latest/download/parchi-pos.apk)**
@@ -214,4 +224,10 @@ push to `main`. A `v*` tag publishes a release:
 git tag v0.1.0 && git push origin v0.1.0
 ```
 
-Locally: JDK 17, the Android SDK, and Gradle 8.7, then `gradle assembleDebug`.
+Locally: JDK 17, the Android SDK, and Gradle 8.7, then `gradle testDebugUnitTest assembleDebug`.
+
+The unit tests include the Parchi Cloud protocol fixtures in
+`app/src/test/resources/protocol`, copied from `parchi-cloud/protocol/fixtures`:
+the phone and the server must pass the same merge, totals and invoice cases.
+The store tests run on real SQLite through Robolectric, a test-only dependency
+that never reaches the APK.

@@ -56,6 +56,10 @@ class MainActivity : Activity() {
         var price: Double,
         var qty: Int,
         var note: String = "",
+        /** The size picked ("Half"), for reports; null for single-price and custom items. */
+        val variant: String? = null,
+        /** GST percent from the menu when rung up. */
+        val tax: Double? = null,
     )
 
     private lateinit var titleView: TextView
@@ -343,7 +347,7 @@ class MainActivity : Activity() {
     /** Single-price items go straight in; the rest ask which size or flavour. */
     private fun pick(item: MenuItem) {
         if (item.variants.isEmpty()) {
-            addLine(item.id, item.id, item.name, item.price)
+            addLine(item.id, item.id, item.name, item.price, null, item.tax)
             return
         }
         val labels = item.variants.map { "${it.label}   ${rs(it.price)}" }.toTypedArray()
@@ -351,7 +355,7 @@ class MainActivity : Activity() {
             .setTitle(item.name)
             .setItems(labels) { _, i ->
                 val v = item.variants[i]
-                addLine(item.id + "|" + v.label, item.id, "${item.name} (${v.label})", v.price)
+                addLine(item.id + "|" + v.label, item.id, "${item.name} (${v.label})", v.price, v.label, item.tax)
             }
             .show()
     }
@@ -448,8 +452,8 @@ class MainActivity : Activity() {
 
     // ── Actions ───────────────────────────────────────────────────────
 
-    private fun addLine(key: String, itemId: String?, name: String, price: Double) {
-        cart.getOrPut(key) { CartLine(key, itemId, name, price, 0) }.qty += 1
+    private fun addLine(key: String, itemId: String?, name: String, price: Double, variant: String?, tax: Double?) {
+        cart.getOrPut(key) { CartLine(key, itemId, name, price, 0, variant = variant, tax = tax) }.qty += 1
         renderGrid()
         renderCart()
     }
@@ -637,7 +641,7 @@ class MainActivity : Activity() {
             now = System.currentTimeMillis()
             // A bill moved onto today in Sales may already hold the next number.
             val today = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(now))
-            token = Prefs.nextToken(this, atLeast = Sales.maxToken(Sales.all(this), today, "", letter) + 1)
+            token = Prefs.nextToken(this, atLeast = Sales.maxToken(this, today, "", letter) + 1)
         } else {
             // Today's clock time on the missed day, so the bills keep the order
             // they were entered in. Tokens carry on from that day's last one and
@@ -650,14 +654,16 @@ class MainActivity : Activity() {
                 set(Calendar.SECOND, clock.get(Calendar.SECOND))
             }.timeInMillis
             val dayKey = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(now))
-            token = Sales.maxToken(Sales.all(this), dayKey, "", letter) + 1
+            token = Sales.maxToken(this, dayKey, "", letter) + 1
         }
         val sale = Sale(
             id = Sales.billId(now, letter, token),
             token = token,
             letter = letter,
             time = now,
-            lines = cart.values.map { SaleLine(it.name, it.price, it.qty, it.note) },
+            lines = cart.values.map {
+                SaleLine(it.name, it.price, it.qty, it.note, itemId = it.itemId, variant = it.variant, custom = it.itemId == null, taxRate = it.tax)
+            },
             payment = payment,
             customer = name,
             discount = discountAmount(cart.values.sumOf { it.price * it.qty }),
