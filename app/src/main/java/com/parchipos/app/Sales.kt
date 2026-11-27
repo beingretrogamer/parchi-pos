@@ -1,9 +1,6 @@
 package com.parchipos.app
 
 import android.content.Context
-import org.json.JSONArray
-import org.json.JSONObject
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -12,10 +9,19 @@ import java.util.UUID
 
 data class SaleLine(
     val name: String,
+    /** Rupees each, as agreed at the counter. Stored as paise. */
     val price: Double,
     val qty: Int,
     /** "less spicy", "Mint mojito" — printed under the item on both slips. */
     val note: String = "",
+    /** The menu item it was rung up from; null for a custom item. Reports follow renames by it. */
+    val itemId: String? = null,
+    /** The size or flavour picked, "Half"; null for a single-price item. */
+    val variant: String? = null,
+    /** Typed in at the counter rather than picked from the menu. */
+    val custom: Boolean = false,
+    /** GST percent in force when it was rung up; later rate changes never rewrite old bills. */
+    val taxRate: Double? = null,
 ) {
     val amount: Double get() = price * qty
 }
@@ -51,6 +57,16 @@ data class Sale(
     val discountReason: String = "",
     /** Why it was voided; required when voiding, cleared on restore. */
     val voidReason: String = "",
+    /** Parchi Cloud id of the phone that rang it up; null before the cloud. */
+    val deviceId: String? = null,
+    /** That phone's name when it rang it up ("Counter"). */
+    val origin: String = "",
+    /** The customer record a credit bill goes on (Parchi Cloud); null for name-only bills. */
+    val customerId: String? = null,
+    /** "A/26-27/000123", from the first cloud connection on; null before. */
+    val invoiceNo: String? = null,
+    /** Edit time of each field group (void, payment, date, content), so edits on two phones both survive. */
+    val fieldTimes: Map<String, Long> = emptyMap(),
 ) {
     /** What the slip and the screen call it: "A12", or "12" without a letter. */
     val label: String get() = letter + token
@@ -67,61 +83,53 @@ data class Sale(
 }
 
 /**
- * Every sale, one JSON object per line.
+ * Every bill, in parchi.db (see [Store]).
  *
- * Append-only for new sales, so recording one is a single small write and an
- * interrupted write can cost at most that one line. Voiding rewrites the file,
- * which is rare enough not to matter.
+ * The functions are the ones the screens always called. Each edit stamps the
+ * time on the field group it touched (void, payment, date), so an edit made
+ * here and a different one made on another phone both survive a sync.
  */
 object Sales {
-    private const val FILE = "sales.jsonl"
 
-    @Synchronized
     fun record(c: Context, sale: Sale) {
-        File(c.filesDir, FILE).appendText(toJson(sale).toString() + "\n")
+        Store.saveBill(c, sale.copy(fieldTimes = sale.fieldTimes.ifEmpty { Bills.allGroups(sale.updatedAt) }))
     }
 
-    @Synchronized
-    fun all(c: Context): List<Sale> {
-        val f = File(c.filesDir, FILE)
-        if (!f.exists()) return emptyList()
-        val sales = f.readLines().mapNotNull { line ->
-            // One damaged line should cost one sale, not the whole history.
-            if (line.isBlank()) null else try { fromJson(JSONObject(line)) } catch (_: Exception) { null }
-        }
-        // Sales from before cloud sync have no uid. Give them one once and
-        // write it down, so every later read (and sync) sees the same one.
-        if (sales.none { it.uid.isEmpty() }) return sales
-        val fixed = sales.map { if (it.uid.isEmpty()) it.copy(uid = UUID.randomUUID().toString()) else it }
-        rewrite(c, fixed)
-        return fixed
-    }
+    fun all(c: Context): List<Sale> = Store.bills(c)
 
-    fun forDay(c: Context, day: String): List<Sale> = all(c).filter { it.day == day }
+    fun forDay(c: Context, day: String): List<Sale> = Store.bills(c, "day = ?", arrayOf(day))
+
+    /** Credit bills, voided ones included, for the dues screens. */
+    fun onCredit(c: Context): List<Sale> = Store.bills(c, "payment = ?", arrayOf(CREDIT))
 
     // Edits find a bill by uid: bill ids from before token letters repeat
     // across phones, and any phone may edit any phone's bill.
 
-    @Synchronized
-    fun setVoided(c: Context, uid: String, voided: Boolean, reason: String = "") {
-        rewrite(c, all(c).map {
-            if (it.uid == uid) it.copy(voided = voided, voidReason = if (voided) reason else "", updatedAt = System.currentTimeMillis()) else it
-        })
+    fun setVoided(c: Context, uid: String, voided: Boolean, reason: String = "") = edit(c, uid, "void") {
+        it.copy(voided = voided, voidReason = if (voided) reason else "")
     }
 
     /** For a bill rung up as Cash that was paid by UPI, or the other way round. */
-    @Synchronized
-    fun setPayment(c: Context, uid: String, payment: String) {
-        rewrite(c, all(c).map { if (it.uid == uid) it.copy(payment = payment, updatedAt = System.currentTimeMillis()) else it })
+    fun setPayment(c: Context, uid: String, payment: String) = edit(c, uid, "payment") { it.copy(payment = payment) }
+
+    private fun edit(c: Context, uid: String, group: String, change: (Sale) -> Sale) {
+        Store.tx(c) {
+            val s = Store.bill(c, uid) ?: return@tx
+            val now = System.currentTimeMillis()
+            Store.saveBill(c, change(s).copy(updatedAt = now, fieldTimes = stamp(s, group, now)))
+        }
     }
+
+    /** The bill's group times with [group] moved to [now]. */
+    private fun stamp(s: Sale, group: String, now: Long): Map<String, Long> =
+        s.fieldTimes.ifEmpty { Bills.allGroups(s.updatedAt) } + (group to now)
 
     /** "yyMMdd-A007": date, the phone's letter, the token. Unique across phones. */
     fun billId(time: Long, letter: String, token: Int): String =
         SimpleDateFormat("yyMMdd", Locale.US).format(Date(time)) + "-" + letter + token.toString().padStart(3, '0')
 
     /** Highest token one phone (this one when [phone] is empty) used on [day]; tokens only need to be unique per phone. */
-    fun maxToken(all: List<Sale>, day: String, phone: String, letter: String): Int =
-        all.filter { it.day == day && it.phone == phone && (phone.isEmpty() || it.letter == letter) }.maxOfOrNull { it.token } ?: 0
+    fun maxToken(c: Context, day: String, phone: String, letter: String): Int = Store.maxToken(c, day, phone, letter)
 
     /**
      * Merges bills from the IceCreamOS feed: other phones' bills, and this
@@ -129,29 +137,30 @@ object Sales {
      * so an edit made here and not yet sent is kept. Returns the uids whose
      * local state now equals the server's, which need no sending.
      */
-    @Synchronized
     fun applyRemote(c: Context, remote: List<Sale>): Set<String> {
         if (remote.isEmpty()) return emptySet()
-        val local = all(c)
-        val byUid = LinkedHashMap<String, Sale>()
-        local.forEach { byUid[it.uid] = it }
-        val settled = HashSet<String>()
-        var changed = false
-        for (r in remote) {
-            val l = byUid[r.uid]
-            when {
-                l == null || l.updatedAt < r.updatedAt -> { byUid[r.uid] = r; changed = true; settled.add(r.uid) }
-                l.updatedAt == r.updatedAt -> settled.add(r.uid)
+        return Store.tx(c) {
+            val settled = HashSet<String>()
+            for (r in remote) {
+                val l = Store.bill(c, r.uid)
+                when {
+                    l == null || l.updatedAt < r.updatedAt -> {
+                        // The feed knows nothing of cloud ids; keep any this phone has.
+                        val merged = r.copy(
+                            origin = r.origin.ifBlank { l?.origin?.ifBlank { null } ?: r.phone },
+                            deviceId = l?.deviceId,
+                            customerId = l?.customerId,
+                            invoiceNo = l?.invoiceNo,
+                            fieldTimes = Bills.allGroups(r.updatedAt),
+                        )
+                        Store.saveBill(c, merged, dirty = false)
+                        settled.add(r.uid)
+                    }
+                    l.updatedAt == r.updatedAt -> settled.add(r.uid)
+                }
             }
+            settled
         }
-        if (changed) rewrite(c, byUid.values.toList())
-        return settled
-    }
-
-    private fun rewrite(c: Context, sales: List<Sale>) {
-        val tmp = File(c.filesDir, "$FILE.tmp")
-        tmp.writeText(sales.joinToString("") { toJson(it).toString() + "\n" })
-        tmp.renameTo(File(c.filesDir, FILE))
     }
 
     /**
@@ -159,10 +168,8 @@ object Sales {
      * token on that day, and a new id to match, since the id is date + token
      * and must not collide with a bill already there.
      */
-    @Synchronized
-    fun moveToDay(c: Context, uid: String, day: Long): Sale? {
-        val all = all(c)
-        val old = all.find { it.uid == uid } ?: return null
+    fun moveToDay(c: Context, uid: String, day: Long): Sale? = Store.tx(c) {
+        val old = Store.bill(c, uid) ?: return@tx null
         val time = Calendar.getInstance().apply {
             val clock = Calendar.getInstance().apply { timeInMillis = old.time }
             timeInMillis = day
@@ -171,17 +178,19 @@ object Sales {
             set(Calendar.SECOND, clock.get(Calendar.SECOND))
         }.timeInMillis
         val key = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(time))
-        if (key == old.day) return old
+        if (key == old.day) return@tx old
         // Next token of the same phone on that day, keeping its letter.
-        val token = maxToken(all, key, old.phone, old.letter) + 1
+        val token = maxToken(c, key, old.phone, old.letter) + 1
+        val now = System.currentTimeMillis()
         val moved = old.copy(
             id = billId(time, old.letter, token),
             token = token,
             time = time,
-            updatedAt = System.currentTimeMillis(),
+            updatedAt = now,
+            fieldTimes = stamp(old, "date", now),
         )
-        rewrite(c, all.map { if (it.uid == uid) moved else it })
-        return moved
+        Store.saveBill(c, moved)
+        moved
     }
 
     /** One row per item line, which is what a spreadsheet wants to pivot on. */
@@ -207,36 +216,4 @@ object Sales {
 
     private fun csvCell(s: String): String =
         if (s.any { it == ',' || it == '"' || it == '\n' }) "\"" + s.replace("\"", "\"\"") + "\"" else s
-
-    private fun toJson(s: Sale): JSONObject {
-        val lines = JSONArray()
-        s.lines.forEach { lines.put(JSONObject().put("name", it.name).put("price", it.price).put("qty", it.qty).put("note", it.note)) }
-        return JSONObject()
-            .put("id", s.id).put("token", s.token).put("time", s.time)
-            .put("payment", s.payment).put("customer", s.customer)
-            .put("voided", s.voided).put("lines", lines)
-            .put("uid", s.uid).put("updatedAt", s.updatedAt)
-            .put("letter", s.letter).put("phone", s.phone)
-            .put("discount", s.discount).put("discountReason", s.discountReason)
-            .put("voidReason", s.voidReason)
-    }
-
-    private fun fromJson(o: JSONObject): Sale {
-        val arr = o.getJSONArray("lines")
-        val lines = (0 until arr.length()).map { i ->
-            val l = arr.getJSONObject(i)
-            SaleLine(l.getString("name"), l.getDouble("price"), l.getInt("qty"), l.optString("note", ""))
-        }
-        return Sale(
-            o.getString("id"), o.getInt("token"), o.getLong("time"), lines,
-            o.optString("payment", "CASH"), o.optString("customer", ""), o.optBoolean("voided", false),
-            uid = o.optString("uid", ""),
-            updatedAt = o.optLong("updatedAt", o.getLong("time")),
-            letter = o.optString("letter", ""),
-            phone = o.optString("phone", ""),
-            discount = o.optDouble("discount", 0.0).takeUnless { it.isNaN() } ?: 0.0,
-            discountReason = o.optString("discountReason", ""),
-            voidReason = o.optString("voidReason", ""),
-        )
-    }
 }

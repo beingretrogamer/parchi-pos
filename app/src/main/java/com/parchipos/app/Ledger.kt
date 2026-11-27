@@ -1,8 +1,8 @@
 package com.parchipos.app
 
 import android.content.Context
-import org.json.JSONObject
-import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
@@ -20,8 +20,17 @@ data class Receipt(
     val note: String = "",
     val voided: Boolean = false,
     val voidReason: String = "",
+    /** Bumped by a void or restore, which syncs like a bill edit. */
+    val updatedAt: Long = time,
+    /** Edit time of each field group (void, content). */
+    val fieldTimes: Map<String, Long> = emptyMap(),
+    /** Parchi Cloud id of the phone that took it. */
+    val deviceId: String? = null,
+    /** The customer record it was paid against (Parchi Cloud); null for name-only. */
+    val customerId: String? = null,
 ) {
     val credited: Double get() = amount + discount
+    val day: String get() = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(time))
 }
 
 /** One row of a customer's account, oldest first, with the balance after it. */
@@ -52,35 +61,29 @@ data class Account(val name: String, val billed: Double, val received: Double, v
  * already have an account.
  */
 object Ledger {
-    private const val FILE = "receipts.jsonl"
 
     fun key(name: String): String = name.trim().replace(Regex("\\s+"), " ").lowercase(Locale.ROOT)
 
-    @Synchronized
     fun record(c: Context, r: Receipt) {
-        File(c.filesDir, FILE).appendText(toJson(r).toString() + "\n")
+        Store.saveReceipt(c, r.copy(fieldTimes = r.fieldTimes.ifEmpty { Receipts.allGroups(r.updatedAt) }))
     }
 
-    @Synchronized
-    fun receipts(c: Context): List<Receipt> {
-        val f = File(c.filesDir, FILE)
-        if (!f.exists()) return emptyList()
-        return f.readLines().mapNotNull { line ->
-            if (line.isBlank()) null else try { fromJson(JSONObject(line)) } catch (_: Exception) { null }
-        }
-    }
+    fun receipts(c: Context): List<Receipt> = Store.receipts(c)
 
-    @Synchronized
     fun setReceiptVoided(c: Context, uid: String, voided: Boolean, reason: String) {
-        val all = receipts(c).map { if (it.uid == uid) it.copy(voided = voided, voidReason = if (voided) reason else "") else it }
-        val tmp = File(c.filesDir, "$FILE.tmp")
-        tmp.writeText(all.joinToString("") { toJson(it).toString() + "\n" })
-        tmp.renameTo(File(c.filesDir, FILE))
+        Store.tx(c) {
+            val r = Store.receipt(c, uid) ?: return@tx
+            val now = System.currentTimeMillis()
+            Store.saveReceipt(c, r.copy(
+                voided = voided, voidReason = if (voided) reason else "", updatedAt = now,
+                fieldTimes = r.fieldTimes.ifEmpty { Receipts.allGroups(r.updatedAt) } + ("void" to now),
+            ))
+        }
     }
 
     /** Everyone who has ever bought on credit, biggest balance first; settled accounts last. */
     fun accounts(c: Context): List<Account> {
-        val sales = Sales.all(c).filter { it.onCredit && !it.voided && it.customer.isNotBlank() }
+        val sales = Sales.onCredit(c).filter { !it.voided && it.customer.isNotBlank() }
         val receipts = receipts(c).filterNot { it.voided }
         val names = LinkedHashMap<String, String>()
         // The name as last typed is the one shown.
@@ -107,7 +110,7 @@ object Ledger {
     /** A customer's statement, voided bills and payments included (with no effect on the balance). */
     fun statement(c: Context, name: String): List<LedgerEntry> {
         val k = key(name)
-        val sales = Sales.all(c).filter { it.onCredit && key(it.customer) == k }
+        val sales = Sales.onCredit(c).filter { key(it.customer) == k }
         val receipts = receipts(c).filter { key(it.customer) == k }
         val events = sales.map { it.time to (it as Any) } + receipts.map { it.time to (it as Any) }
         var bal = 0.0
@@ -130,21 +133,4 @@ object Ledger {
             }
         }
     }
-
-    private fun toJson(r: Receipt): JSONObject = JSONObject()
-        .put("uid", r.uid).put("time", r.time).put("customer", r.customer)
-        .put("amount", r.amount).put("discount", r.discount).put("mode", r.mode)
-        .put("note", r.note).put("voided", r.voided).put("voidReason", r.voidReason)
-
-    private fun fromJson(o: JSONObject) = Receipt(
-        uid = o.getString("uid"),
-        time = o.getLong("time"),
-        customer = o.getString("customer"),
-        amount = o.getDouble("amount"),
-        discount = o.optDouble("discount", 0.0).takeUnless { it.isNaN() } ?: 0.0,
-        mode = o.optString("mode", "CASH"),
-        note = o.optString("note", ""),
-        voided = o.optBoolean("voided", false),
-        voidReason = o.optString("voidReason", ""),
-    )
 }

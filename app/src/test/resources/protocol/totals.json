@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "about": "billTotals(lines, discount, pricesIncludeTax). Amounts in paise. The discount is spread over lines in proportion, the remainder on the last line; tax is per line at its own rate, rounded half away from zero (Math.round).",
+  "cases": [
+    { "name": "no tax, no discount", "lines": [{ "price": 4000, "qty": 2 }, { "price": 6000, "qty": 1 }], "discount": 0, "pricesIncludeTax": true,
+      "expected": { "subtotal": 14000, "discount": 0, "tax": 0, "total": 14000, "lines": [{ "net": 8000, "tax": 0 }, { "net": 6000, "tax": 0 }] } },
+    { "name": "5% inclusive with a discount", "lines": [{ "price": 10500, "qty": 1, "taxRate": 5 }, { "price": 5250, "qty": 2, "taxRate": 5 }], "discount": 2100, "pricesIncludeTax": true,
+      "expected": { "subtotal": 21000, "discount": 2100, "tax": 900, "total": 18900, "lines": [{ "net": 9450, "tax": 450 }, { "net": 9450, "tax": 450 }] } },
+    { "name": "discount remainder lands on the last line", "lines": [{ "price": 1000, "qty": 1 }, { "price": 1000, "qty": 1 }, { "price": 1000, "qty": 1 }], "discount": 100, "pricesIncludeTax": true,
+      "expected": { "subtotal": 3000, "discount": 100, "tax": 0, "total": 2900, "lines": [{ "net": 967, "tax": 0 }, { "net": 967, "tax": 0 }, { "net": 966, "tax": 0 }] } },
+    { "name": "exclusive prices add the tax", "lines": [{ "price": 10000, "qty": 1, "taxRate": 5 }], "discount": 0, "pricesIncludeTax": false,
+      "expected": { "subtotal": 10000, "discount": 0, "tax": 500, "total": 10500, "lines": [{ "net": 10000, "tax": 500 }] } },
+    { "name": "a discount above the subtotal is capped", "lines": [{ "price": 5000, "qty": 1 }], "discount": 9000, "pricesIncludeTax": true,
+      "expected": { "subtotal": 5000, "discount": 5000, "tax": 0, "total": 0, "lines": [{ "net": 0, "tax": 0 }] } }
+  ]
+}

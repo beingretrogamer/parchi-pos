@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "about": "Financial year of a yyyyMMdd day (April to March), and invoice number formatting/parsing.",
+  "fy": [
+    { "day": "20261127", "fy": "26-27" },
+    { "day": "20270331", "fy": "26-27" },
+    { "day": "20270401", "fy": "27-28" },
+    { "day": "20260101", "fy": "25-26" },
+    { "day": "20991231", "fy": "99-00" }
+  ],
+  "format": [
+    { "letter": "A", "fy": "26-27", "serial": 123, "prefix": null, "invoice": "A/26-27/000123" },
+    { "letter": "B", "fy": "26-27", "serial": 1, "prefix": "MAIN", "invoice": "MAIN-B/26-27/000001" },
+    { "letter": "AA", "fy": "27-28", "serial": 999999, "prefix": null, "invoice": "AA/27-28/999999" }
+  ],
+  "invalid": ["A/26-27/123", "a/26-27/000123", "A-26-27-000123", ""]
+}

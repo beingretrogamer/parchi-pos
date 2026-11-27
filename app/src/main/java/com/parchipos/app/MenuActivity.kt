@@ -36,7 +36,7 @@ class MenuActivity : Activity() {
         val items = Menu.all(this)
         noItems.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
         itemList.removeAllViews()
-        items.forEachIndexed { i, item ->
+        items.forEach { item ->
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -60,8 +60,9 @@ class MenuActivity : Activity() {
                 setTextColor(getColor(R.color.ink_soft))
             })
             row.addView(label, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            row.addView(arrow("↑", enabled = i > 0) { Menu.move(this, item.id, -1); render() })
-            row.addView(arrow("↓", enabled = i < items.size - 1) { Menu.move(this, item.id, 1); render() })
+            // Items move within their category, which is how the till lists them.
+            row.addView(arrow("↑", enabled = Menu.canMove(items, item, -1)) { Menu.move(this, item.id, -1); render() })
+            row.addView(arrow("↓", enabled = Menu.canMove(items, item, 1)) { Menu.move(this, item.id, 1); render() })
             itemList.addView(row)
         }
     }

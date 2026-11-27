@@ -3,17 +3,16 @@ package com.parchipos.app
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.File
 import java.util.Locale
 import java.util.UUID
 
 /** One size or flavour of an item: "Half", "Cone", "Mint". */
-data class Variant(val label: String, val price: Double)
+data class Variant(val label: String, val price: Double, val id: String = "")
 
 data class MenuItem(
     val id: String,
     val name: String,
-    /** Rupees, GST included — the price on the board is the price charged. */
+    /** Rupees, GST included by default — the price on the board is the price charged. */
     val price: Double,
     val category: String,
     /**
@@ -21,80 +20,161 @@ data class MenuItem(
      * one, so Half/Full momos are one tile rather than two near-identical ones.
      */
     val variants: List<Variant> = emptyList(),
+    /** Order within its category. */
+    val sort: Double = 0.0,
+    val categoryId: String? = null,
+    /** GST percent rung up with it: its own rate, else its category's. Read-only here; set in the portal. */
+    val tax: Double? = null,
 )
 
 /**
- * The menu, kept as one small JSON file.
+ * The menu: category and menu item records in parchi.db, the same records
+ * Parchi Cloud syncs. Items are listed category by category, each category in
+ * its own order.
  *
- * org.json ships with Android, so this costs no dependency, and a menu of a
- * hundred items is rewritten whole on every change without anyone noticing.
+ * Saving keeps whatever this version doesn't edit (a tax rate set in the
+ * portal, for one), so the phone never erases it.
  */
 object Menu {
-    private const val FILE = "menu.json"
 
-    @Synchronized
     fun all(c: Context): List<MenuItem> {
-        val f = File(c.filesDir, FILE)
-        // First launch only: an existing file — even an emptied one — is the
-        // shop's own menu and is never replaced.
-        if (!f.exists()) {
-            val seed = parseLines(DEFAULT_MENU).items
-            write(c, seed)
-            return seed
-        }
-        return try {
-            val arr = JSONArray(f.readText())
-            (0 until arr.length()).map { i ->
-                val o = arr.getJSONObject(i)
-                val va = o.optJSONArray("variants") ?: JSONArray()
-                MenuItem(
-                    o.getString("id"),
-                    o.getString("name"),
-                    o.getDouble("price"),
-                    o.optString("category", ""),
-                    (0 until va.length()).map { j ->
-                        Variant(va.getJSONObject(j).getString("label"), va.getJSONObject(j).getDouble("price"))
-                    },
-                )
-            }
-        } catch (_: Exception) {
-            emptyList()
-        }
+        val cats = Store.records(c, "category").associateBy { it.id }
+        return Store.records(c, "menuItem")
+            .map { fromRecord(it, cats) }
+            .sortedWith(compareBy<MenuItem>({ cats[it.categoryId]?.data?.optDouble("sort")?.takeUnless(Double::isNaN) ?: Double.MAX_VALUE }, { it.sort }, { it.name.lowercase(Locale.ROOT) }))
     }
 
+    /** Categories that have items, in order. */
     fun categories(c: Context): List<String> =
         all(c).map { it.category }.filter { it.isNotBlank() }.distinct()
 
-    @Synchronized
     fun upsert(c: Context, item: MenuItem) {
-        val items = all(c).toMutableList()
-        val i = items.indexOfFirst { it.id == item.id }
-        if (i >= 0) items[i] = item else items.add(item)
-        write(c, items)
+        Store.tx(c) { save(c, item) }
     }
 
-    @Synchronized
-    fun addAll(c: Context, new: List<MenuItem>) = write(c, all(c) + new)
+    fun addAll(c: Context, new: List<MenuItem>) {
+        Store.tx(c) { new.forEach { save(c, it) } }
+    }
 
-    @Synchronized
-    fun delete(c: Context, id: String) = write(c, all(c).filterNot { it.id == id })
+    /** Archived, not erased: the record stays (deleted), so the deletion reaches every phone. */
+    fun delete(c: Context, id: String) {
+        Store.tx(c) { remove(c, id) }
+    }
 
     /** Swaps in the menu from the boards, for a fresh start. */
-    @Synchronized
-    fun resetToDefault(c: Context) = write(c, parseLines(DEFAULT_MENU).items)
+    fun resetToDefault(c: Context) {
+        Store.tx(c) {
+            all(c).forEach { remove(c, it.id) }
+            parseLines(DEFAULT_MENU).items.forEach { save(c, it) }
+        }
+    }
 
-    /** Moves one item up or down, so the counter can put the bestsellers first. */
-    @Synchronized
+    /** Moves one item up or down within its category, so the counter can put the bestsellers first. */
     fun move(c: Context, id: String, delta: Int) {
-        val items = all(c).toMutableList()
-        val from = items.indexOfFirst { it.id == id }
-        val to = from + delta
-        if (from < 0 || to !in items.indices) return
-        items.add(to, items.removeAt(from))
-        write(c, items)
+        Store.tx(c) {
+            val items = all(c)
+            val item = items.find { it.id == id } ?: return@tx
+            val siblings = items.filter { it.categoryId == item.categoryId }.toMutableList()
+            val from = siblings.indexOf(item)
+            val to = from + delta
+            if (to !in siblings.indices) return@tx
+            siblings.add(to, siblings.removeAt(from))
+            val now = System.currentTimeMillis()
+            siblings.forEachIndexed { i, s ->
+                val sort = (i + 1).toDouble()
+                if (s.sort == sort) return@forEachIndexed
+                val rec = Store.record(c, "menuItem", s.id) ?: return@forEachIndexed
+                Store.saveRecord(c, rec.copy(data = JSONObject(rec.data.toString()).put("sort", sort), updatedAt = maxOf(now, rec.updatedAt + 1), dirty = true))
+            }
+        }
+    }
+
+    /** Whether an item can move one place that way within its category. */
+    fun canMove(items: List<MenuItem>, item: MenuItem, delta: Int): Boolean {
+        val siblings = items.filter { it.categoryId == item.categoryId }
+        return siblings.indexOf(item) + delta in siblings.indices
     }
 
     fun newId(): String = UUID.randomUUID().toString()
+
+    /** Category names match ignoring case and extra spaces. */
+    fun catKey(name: String): String = name.trim().replace(Regex("\\s+"), " ").lowercase(Locale.ROOT)
+
+    private fun save(c: Context, item: MenuItem) {
+        val existing = Store.record(c, "menuItem", item.id)
+        val catId = item.category.trim().takeIf { it.isNotEmpty() }?.let { categoryId(c, it) }
+        val sameCategory = existing != null && !existing.deleted && existing.data.optStringOrNull("categoryId") == catId
+        val sort = if (sameCategory) existing!!.data.optDouble("sort", 0.0)
+            else (all(c).filter { it.categoryId == catId && it.id != item.id }.maxOfOrNull { it.sort } ?: 0.0) + 1
+        // Keep each size's id where the label is the same, so cloud records don't churn.
+        val oldVariants = existing?.data?.optJSONArray("variants")
+        val variants = item.variants.map { v ->
+            val match = (0 until (oldVariants?.length() ?: 0)).map { oldVariants!!.getJSONObject(it) }
+                .find { it.optString("label").equals(v.label, ignoreCase = true) }
+            v.copy(id = v.id.ifEmpty { match?.optString("id") ?: Store.randomId("v") })
+        }
+        val now = System.currentTimeMillis()
+        Store.saveRecord(c, Store.Rec(
+            kind = "menuItem",
+            id = item.id,
+            data = itemData(item.copy(sort = sort, variants = variants), catId, existing?.data),
+            updatedAt = maxOf(now, (existing?.updatedAt ?: 0) + 1),
+            dirty = true,
+        ))
+    }
+
+    private fun remove(c: Context, id: String) {
+        val rec = Store.record(c, "menuItem", id) ?: return
+        Store.saveRecord(c, rec.copy(deleted = true, updatedAt = maxOf(System.currentTimeMillis(), rec.updatedAt + 1), dirty = true))
+    }
+
+    /** The category with this name, created if there is none. Its id comes from the name, so two phones make the same one. */
+    private fun categoryId(c: Context, name: String): String {
+        val key = catKey(name)
+        Store.records(c, "category").find { catKey(it.data.optString("name")) == key }?.let { return it.id }
+        val id = Store.stableId("cat", key)
+        val sort = (Store.records(c, "category").maxOfOrNull { it.data.optDouble("sort", 0.0) } ?: 0.0) + 1
+        val old = Store.record(c, "category", id)
+        Store.saveRecord(c, Store.Rec(
+            kind = "category",
+            id = id,
+            data = (old?.data?.let { JSONObject(it.toString()) } ?: JSONObject()).put("name", name).put("sort", sort),
+            updatedAt = maxOf(System.currentTimeMillis(), (old?.updatedAt ?: 0) + 1),
+            dirty = true,
+        ))
+        return id
+    }
+
+    private fun fromRecord(r: Store.Rec, cats: Map<String, Store.Rec>): MenuItem {
+        val d = r.data
+        val catId = d.optStringOrNull("categoryId")
+        val cat = cats[catId]
+        val va = d.optJSONArray("variants") ?: JSONArray()
+        val own = d.optDouble("taxRate").takeUnless(Double::isNaN)
+        return MenuItem(
+            id = r.id,
+            name = d.optString("name"),
+            price = Protocol.rupees(d.optLong("price")),
+            category = cat?.data?.optString("name") ?: "",
+            variants = (0 until va.length()).map { va.getJSONObject(it).let { v -> Variant(v.optString("label"), Protocol.rupees(v.optLong("price")), v.optString("id")) } },
+            sort = d.optDouble("sort", 0.0),
+            categoryId = if (cat != null) catId else null,
+            tax = own ?: cat?.data?.optDouble("taxRate")?.takeUnless(Double::isNaN),
+        )
+    }
+
+    /** The menu item record, written over [base] so fields the phone doesn't edit (taxRate) survive. */
+    internal fun itemData(item: MenuItem, categoryId: String?, base: JSONObject?): JSONObject {
+        val o = if (base != null) JSONObject(base.toString()) else JSONObject()
+        o.put("name", item.name)
+        o.put("price", Protocol.paise(item.variants.firstOrNull()?.price ?: item.price))
+        o.putOrRemove("categoryId", categoryId)
+        o.put("variants", JSONArray().apply {
+            item.variants.forEach { put(JSONObject().put("id", it.id.ifEmpty { Store.randomId("v") }).put("label", it.label).put("price", Protocol.paise(it.price))) }
+        })
+        o.put("sort", item.sort)
+        return o
+    }
 
     // ── Text format ───────────────────────────────────────────────────
     //
@@ -149,22 +229,8 @@ object Menu {
     private fun plain(n: Double): String =
         if (n == Math.floor(n)) n.toLong().toString() else String.format(Locale.US, "%.2f", n)
 
-    private fun write(c: Context, items: List<MenuItem>) {
-        val arr = JSONArray()
-        items.forEach { m ->
-            val va = JSONArray()
-            m.variants.forEach { va.put(JSONObject().put("label", it.label).put("price", it.price)) }
-            arr.put(JSONObject().put("id", m.id).put("name", m.name).put("price", m.price)
-                .put("category", m.category).put("variants", va))
-        }
-        // Write-then-rename, so a crash mid-save cannot leave half a menu.
-        val tmp = File(c.filesDir, "$FILE.tmp")
-        tmp.writeText(arr.toString())
-        tmp.renameTo(File(c.filesDir, FILE))
-    }
-
     /** TUB's × Scoops & Sips, from the boards at the counter. */
-    private val DEFAULT_MENU = """
+    internal val DEFAULT_MENU = """
         Vanilla, Cup 40 / Cone 50 / Double 70, Scoops
         Strawberry, Cup 40 / Cone 50 / Double 70, Scoops
         Butterscotch, Cup 40 / Cone 50 / Double 70, Scoops
