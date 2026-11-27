@@ -686,13 +686,19 @@ class MainActivity : Activity() {
         print(sale)
     }
 
-    private fun print(sale: Sale) {
-        Printer.send(this, "token ${sale.label}", Printer.saleBytes(this, sale)) { err ->
-            if (err == null || isFinishing) return@send
+    /** Bill and parchi go to their own printers; Retry reprints only what failed. */
+    private fun print(sale: Sale, bill: Boolean = true, parchi: Boolean = Prefs.shop(this).printParchi) {
+        Printer.sale(this, sale, bill, parchi) { failed ->
+            if (failed.isEmpty() || isFinishing) return@sale
+            val why = failed.joinToString("\n") {
+                getString(R.string.slip_failed, getString(if (it.slip == Slip.BILL) R.string.slip_bill else R.string.slip_parchi), it.printer, it.reason)
+            }
             AlertDialog.Builder(this)
                 .setTitle(getString(R.string.print_failed_title, sale.label))
-                .setMessage(getString(R.string.print_failed_body, err))
-                .setPositiveButton(R.string.btn_retry) { _, _ -> print(sale) }
+                .setMessage(getString(R.string.print_failed_body, why))
+                .setPositiveButton(R.string.btn_retry) { _, _ ->
+                    print(sale, bill = failed.any { it.slip == Slip.BILL }, parchi = failed.any { it.slip == Slip.PARCHI })
+                }
                 .setNegativeButton(R.string.btn_later, null)
                 .show()
         }

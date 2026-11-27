@@ -28,23 +28,83 @@
 
             <TextView style="@style/SectionLabel" android:text="@string/section_printer" />
 
-            <TextView style="@style/FieldLabel" android:text="@string/label_printer_ip" />
+            <!-- Bill printer: the keys it always had, plus Bluetooth. -->
+            <TextView style="@style/FieldLabel" android:text="@string/label_bill_printer" />
 
-            <EditText
-                android:id="@+id/printerIp"
-                style="@style/Field"
-                android:hint="192.168.1.200"
-                android:importantForAutofill="no"
-                android:inputType="text" />
+            <RadioGroup
+                android:id="@+id/billKind"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
 
-            <TextView style="@style/FieldLabel" android:text="@string/label_printer_port" />
+                <RadioButton
+                    android:id="@+id/billNet"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:text="@string/printer_net"
+                    android:textColor="@color/ink" />
 
-            <EditText
-                android:id="@+id/printerPort"
-                style="@style/Field"
-                android:hint="9100"
-                android:importantForAutofill="no"
-                android:inputType="number" />
+                <RadioButton
+                    android:id="@+id/billBt"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:text="@string/printer_bt"
+                    android:textColor="@color/ink" />
+            </RadioGroup>
+
+            <LinearLayout
+                android:id="@+id/billNetBlock"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView style="@style/FieldLabel" android:text="@string/label_printer_ip" />
+
+                <EditText
+                    android:id="@+id/printerIp"
+                    style="@style/Field"
+                    android:hint="192.168.1.200"
+                    android:importantForAutofill="no"
+                    android:inputType="text" />
+
+                <TextView style="@style/FieldLabel" android:text="@string/label_printer_port" />
+
+                <EditText
+                    android:id="@+id/printerPort"
+                    style="@style/Field"
+                    android:hint="9100"
+                    android:importantForAutofill="no"
+                    android:inputType="number" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/billBtBlock"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/billBtLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:textColor="@color/ink"
+                    android:textSize="15sp" />
+
+                <Button
+                    android:id="@+id/billBtChoose"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/btn_secondary"
+                    android:text="@string/btn_bt_choose"
+                    android:textAllCaps="false"
+                    android:textColor="@color/ink"
+                    android:textSize="14sp" />
+            </LinearLayout>
 
             <TextView style="@style/FieldLabel" android:text="@string/label_paper" />
 
@@ -71,15 +131,161 @@
                     android:textColor="@color/ink" />
             </RadioGroup>
 
+            <Button
+                android:id="@+id/btnTest"
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/btn_secondary"
+                android:text="@string/btn_test_bill"
+                android:textAllCaps="false"
+                android:textColor="@color/ink"
+                android:textSize="15sp" />
+
             <CheckBox
                 android:id="@+id/printParchi"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
+                android:layout_marginTop="10dp"
                 android:minHeight="44dp"
                 android:text="@string/label_print_parchi"
                 android:textColor="@color/ink"
                 android:textSize="14sp" />
+
+            <!-- Kitchen printer: hidden while no parchi is printed. -->
+            <LinearLayout
+                android:id="@+id/kitchenBlock"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView style="@style/FieldLabel" android:text="@string/label_kitchen_printer" />
+
+                <RadioGroup
+                    android:id="@+id/kitchenKind"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                <RadioButton
+                    android:id="@+id/kitchenSame"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    
+                    android:text="@string/printer_same"
+                    android:textColor="@color/ink" />
+
+                <RadioButton
+                    android:id="@+id/kitchenNet"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    
+                    android:text="@string/printer_net"
+                    android:textColor="@color/ink" />
+
+                <RadioButton
+                    android:id="@+id/kitchenBt"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    
+                    android:text="@string/printer_bt"
+                    android:textColor="@color/ink" />
+                </RadioGroup>
+
+            <LinearLayout
+                android:id="@+id/kitchenNetBlock"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView style="@style/FieldLabel" android:text="@string/label_printer_ip" />
+
+                <EditText
+                    android:id="@+id/kitchenIp"
+                    style="@style/Field"
+                    android:hint="192.168.1.200"
+                    android:importantForAutofill="no"
+                    android:inputType="text" />
+
+                <TextView style="@style/FieldLabel" android:text="@string/label_printer_port" />
+
+                <EditText
+                    android:id="@+id/kitchenPort"
+                    style="@style/Field"
+                    android:hint="9100"
+                    android:importantForAutofill="no"
+                    android:inputType="number" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/kitchenBtBlock"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/kitchenBtLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:textColor="@color/ink"
+                    android:textSize="15sp" />
+
+                <Button
+                    android:id="@+id/kitchenBtChoose"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/btn_secondary"
+                    android:text="@string/btn_bt_choose"
+                    android:textAllCaps="false"
+                    android:textColor="@color/ink"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/kitchenPaperBlock"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+            <TextView style="@style/FieldLabel" android:text="@string/label_paper" />
+
+            <RadioGroup
+                android:id="@+id/kitchenPaper"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <RadioButton
+                    android:id="@+id/kitchenPaper80"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:text="@string/paper_80"
+                    android:textColor="@color/ink" />
+
+                <RadioButton
+                    android:id="@+id/kitchenPaper58"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:text="@string/paper_58"
+                    android:textColor="@color/ink" />
+            </RadioGroup>
+                </LinearLayout>
+
+            <Button
+                android:id="@+id/btnTestKitchen"
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/btn_secondary"
+                android:text="@string/btn_test_kitchen"
+                android:textAllCaps="false"
+                android:textColor="@color/ink"
+                android:textSize="15sp" />
+            </LinearLayout>
 
             <CheckBox
                 android:id="@+id/smallPrint"
@@ -110,17 +316,6 @@
                 android:contentDescription="@string/label_print_brand"
                 android:padding="8dp"
                 android:scaleType="fitCenter" />
-
-            <Button
-                android:id="@+id/btnTest"
-                android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/btn_secondary"
-                android:text="@string/btn_test"
-                android:textAllCaps="false"
-                android:textColor="@color/ink"
-                android:textSize="15sp" />
 
             <TextView
                 android:layout_width="match_parent"

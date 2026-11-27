@@ -16,6 +16,57 @@ object Prefs {
     fun printerIp(c: Context): String = p(c).getString("printerIp", DEF_PRINTER_IP)!!
     fun printerPort(c: Context): Int = p(c).getInt("printerPort", DEF_PRINTER_PORT)
 
+    // ── Printers ────────────────────────────────────────────────────────
+    //
+    // The bill printer keeps the keys it always had (printerIp, printerPort,
+    // and the paper width in Shop), so an update changes nothing until
+    // someone picks Bluetooth or a kitchen printer.
+
+    /** Where bills (and dues receipts) print. */
+    fun billPrinter(c: Context): PrinterTarget {
+        val p = p(c)
+        return PrinterTarget(
+            bluetooth = p.getString("printerKind", "net") == "bt",
+            host = p.getString("printerIp", DEF_PRINTER_IP)!!,
+            port = p.getInt("printerPort", DEF_PRINTER_PORT),
+            btAddress = p.getString("printerBtAddress", "")!!,
+            btName = p.getString("printerBtName", "")!!,
+        )
+    }
+
+    /** Where the kitchen parchi prints; the bill printer unless one is set. */
+    fun kitchenPrinter(c: Context): KitchenPrinter {
+        val p = p(c)
+        val mode = p.getString("kitchenMode", "same")
+        return KitchenPrinter(
+            sameAsBill = mode != "net" && mode != "bt",
+            target = PrinterTarget(
+                bluetooth = mode == "bt",
+                host = p.getString("kitchenIp", "")!!,
+                port = p.getInt("kitchenPort", DEF_PRINTER_PORT),
+                btAddress = p.getString("kitchenBtAddress", "")!!,
+                btName = p.getString("kitchenBtName", "")!!,
+            ),
+            width = p.getInt("kitchenWidth", p.getInt("width", DEF_WIDTH)),
+        )
+    }
+
+    fun savePrinters(c: Context, bill: PrinterTarget, kitchen: KitchenPrinter) {
+        p(c).edit()
+            .putString("printerKind", if (bill.bluetooth) "bt" else "net")
+            .putString("printerIp", bill.host)
+            .putInt("printerPort", bill.port)
+            .putString("printerBtAddress", bill.btAddress)
+            .putString("printerBtName", bill.btName)
+            .putString("kitchenMode", if (kitchen.sameAsBill) "same" else if (kitchen.target.bluetooth) "bt" else "net")
+            .putString("kitchenIp", kitchen.target.host)
+            .putInt("kitchenPort", kitchen.target.port)
+            .putString("kitchenBtAddress", kitchen.target.btAddress)
+            .putString("kitchenBtName", kitchen.target.btName)
+            .putInt("kitchenWidth", kitchen.width)
+            .apply()
+    }
+
     data class Shop(
         val name: String,
         val address: String,
@@ -47,12 +98,9 @@ object Prefs {
         )
     }
 
-    fun save(c: Context, ip: String, port: Int, s: Shop) {
+    fun save(c: Context, bill: PrinterTarget, kitchen: KitchenPrinter, s: Shop) {
         writeShop(c, s)
-        p(c).edit()
-            .putString("printerIp", ip)
-            .putInt("printerPort", port)
-            .apply()
+        savePrinters(c, bill, kitchen)
     }
 
     private fun writeShop(c: Context, s: Shop) {

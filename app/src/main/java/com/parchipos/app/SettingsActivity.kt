@@ -1,14 +1,20 @@
 package com.parchipos.app
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlertDialog
+import android.bluetooth.BluetoothAdapter
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
+import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -22,13 +28,19 @@ import java.util.Date
 import java.util.Locale
 import kotlin.concurrent.thread
 
-/** Printer address, what the bill says at the top and bottom, and the print log. */
+/** Printers, what the bill says at the top and bottom, cloud sync, and the print log. */
 class SettingsActivity : Activity() {
 
+    private lateinit var billKind: RadioGroup
     private lateinit var printerIp: EditText
     private lateinit var printerPort: EditText
     private lateinit var paper: RadioGroup
     private lateinit var printParchi: CheckBox
+    private lateinit var kitchenBlock: View
+    private lateinit var kitchenKind: RadioGroup
+    private lateinit var kitchenIp: EditText
+    private lateinit var kitchenPort: EditText
+    private lateinit var kitchenPaper: RadioGroup
     private lateinit var smallPrint: CheckBox
     private lateinit var printBrand: CheckBox
     private lateinit var shopName: EditText
@@ -41,6 +53,12 @@ class SettingsActivity : Activity() {
     private lateinit var serverUrl: EditText
     private lateinit var syncStatus: TextView
 
+    /** The Bluetooth printer picked for each slot; only the address and name are kept. */
+    private var billBt = PrinterTarget(bluetooth = true)
+    private var kitchenBt = PrinterTarget(bluetooth = true)
+    /** Which slot the picker is for, held across the permission and Bluetooth-on prompts. */
+    private var pickingForKitchen = false
+
     private val ui = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,10 +66,16 @@ class SettingsActivity : Activity() {
         PrintLog.init(this)
         setContentView(R.layout.activity_settings)
 
+        billKind = findViewById(R.id.billKind)
         printerIp = findViewById(R.id.printerIp)
         printerPort = findViewById(R.id.printerPort)
         paper = findViewById(R.id.paper)
         printParchi = findViewById(R.id.printParchi)
+        kitchenBlock = findViewById(R.id.kitchenBlock)
+        kitchenKind = findViewById(R.id.kitchenKind)
+        kitchenIp = findViewById(R.id.kitchenIp)
+        kitchenPort = findViewById(R.id.kitchenPort)
+        kitchenPaper = findViewById(R.id.kitchenPaper)
         smallPrint = findViewById(R.id.smallPrint)
         printBrand = findViewById(R.id.printBrand)
         shopName = findViewById(R.id.shopName)
@@ -67,14 +91,26 @@ class SettingsActivity : Activity() {
         serverUrl.setText(Prefs.serverUrl(this))
         findViewById<Button>(R.id.btnSyncNow).setOnClickListener { syncNow() }
 
-        printerIp.setText(Prefs.printerIp(this))
-        printerPort.setText(Prefs.printerPort(this).toString())
+        fillPrinters()
         // The exact bitmap the bill prints, so there is no surprise at the printer.
         findViewById<ImageView>(R.id.brandPreview).setImageBitmap(Wordmark.bitmap(576))
         fillShop()
 
+        billKind.setOnCheckedChangeListener { _, id ->
+            renderPrinters()
+            if (id == R.id.billBt && !billBt.ready) pickBluetooth(forKitchen = false)
+        }
+        kitchenKind.setOnCheckedChangeListener { _, id ->
+            renderPrinters()
+            if (id == R.id.kitchenBt && !kitchenBt.ready) pickBluetooth(forKitchen = true)
+        }
+        printParchi.setOnCheckedChangeListener { _, _ -> renderPrinters() }
+        findViewById<Button>(R.id.billBtChoose).setOnClickListener { pickBluetooth(forKitchen = false) }
+        findViewById<Button>(R.id.kitchenBtChoose).setOnClickListener { pickBluetooth(forKitchen = true) }
+
         findViewById<Button>(R.id.btnSave).setOnClickListener { if (save()) finish() }
-        findViewById<Button>(R.id.btnTest).setOnClickListener { testPrint() }
+        findViewById<Button>(R.id.btnTest).setOnClickListener { testPrint(kitchen = false) }
+        findViewById<Button>(R.id.btnTestKitchen).setOnClickListener { testPrint(kitchen = true) }
         findViewById<Button>(R.id.btnCopyLog).setOnClickListener {
             try {
                 (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager)
@@ -98,6 +134,156 @@ class SettingsActivity : Activity() {
         save(quiet = true)
     }
 
+    // ── Printers ──────────────────────────────────────────────────────
+
+    private fun fillPrinters() {
+        val bill = Prefs.billPrinter(this)
+        val kitchen = Prefs.kitchenPrinter(this)
+        billKind.check(if (bill.bluetooth) R.id.billBt else R.id.billNet)
+        printerIp.setText(bill.host)
+        printerPort.setText(bill.port.toString())
+        billBt = PrinterTarget(bluetooth = true, btAddress = bill.btAddress, btName = bill.btName)
+
+        kitchenKind.check(when {
+            kitchen.sameAsBill -> R.id.kitchenSame
+            kitchen.target.bluetooth -> R.id.kitchenBt
+            else -> R.id.kitchenNet
+        })
+        kitchenIp.setText(kitchen.target.host)
+        kitchenPort.setText(kitchen.target.port.toString())
+        kitchenBt = PrinterTarget(bluetooth = true, btAddress = kitchen.target.btAddress, btName = kitchen.target.btName)
+        kitchenPaper.check(if (kitchen.width == 32) R.id.kitchenPaper58 else R.id.kitchenPaper80)
+        renderPrinters()
+    }
+
+    /** Shows the fields for whichever kind of printer is picked in each slot. */
+    private fun renderPrinters() {
+        val billOnBt = billKind.checkedRadioButtonId == R.id.billBt
+        findViewById<View>(R.id.billNetBlock).visibility = if (billOnBt) View.GONE else View.VISIBLE
+        findViewById<View>(R.id.billBtBlock).visibility = if (billOnBt) View.VISIBLE else View.GONE
+        findViewById<TextView>(R.id.billBtLabel).text = btLabel(billBt)
+
+        kitchenBlock.visibility = if (printParchi.isChecked) View.VISIBLE else View.GONE
+        val k = kitchenKind.checkedRadioButtonId
+        findViewById<View>(R.id.kitchenNetBlock).visibility = if (k == R.id.kitchenNet) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.kitchenBtBlock).visibility = if (k == R.id.kitchenBt) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.kitchenPaperBlock).visibility = if (k == R.id.kitchenSame) View.GONE else View.VISIBLE
+        findViewById<View>(R.id.btnTestKitchen).visibility = if (k == R.id.kitchenSame) View.GONE else View.VISIBLE
+        findViewById<TextView>(R.id.kitchenBtLabel).text = btLabel(kitchenBt)
+    }
+
+    private fun btLabel(t: PrinterTarget): String =
+        if (!t.ready) getString(R.string.bt_none_chosen) else getString(R.string.bt_chosen, t.label, t.btAddress)
+
+    /**
+     * Lists paired devices to pick from. Asks for the Nearby devices
+     * permission (Android 12+) and for Bluetooth to be on first, coming back
+     * here once granted.
+     */
+    @SuppressLint("MissingPermission") // ACTION_REQUEST_ENABLE runs only once the permission is held
+    private fun pickBluetooth(forKitchen: Boolean) {
+        pickingForKitchen = forKitchen
+        if (BtPrinter.adapter(this) == null) { toast(getString(R.string.bt_no_bluetooth)); return }
+        if (!BtPrinter.hasPermission(this)) {
+            requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), REQ_BT_PERMISSION)
+            return
+        }
+        if (!BtPrinter.isOn(this)) {
+            try {
+                startActivityForResult(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE), REQ_BT_ON)
+            } catch (_: Exception) {
+                toast(getString(R.string.bt_turn_on))
+            }
+            return
+        }
+        val devices = try { BtPrinter.paired(this) } catch (e: BtPrinter.BtError) { toast(e.message ?: ""); return }
+        if (devices.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setMessage(R.string.bt_none_paired)
+                .setPositiveButton(R.string.bt_open_settings) { _, _ -> openBluetoothSettings() }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+            return
+        }
+        val labels = devices.map { d ->
+            d.name + (if (d.looksLikePrinter) "  ·  " + getString(R.string.bt_likely_printer) else "") + "\n" + d.address
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.bt_title_choose)
+            .setItems(labels) { _, i ->
+                val picked = PrinterTarget(bluetooth = true, btAddress = devices[i].address, btName = devices[i].name)
+                if (pickingForKitchen) kitchenBt = picked else billBt = picked
+                renderPrinters()
+                save(quiet = true)
+            }
+            .setNeutralButton(R.string.bt_pair_new) { _, _ -> openBluetoothSettings() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun openBluetoothSettings() {
+        try {
+            startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+        } catch (_: Exception) {
+            toast(getString(R.string.bt_turn_on))
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQ_BT_PERMISSION) return
+        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            pickBluetooth(pickingForKitchen)
+            return
+        }
+        // Denied for good: only Android's app settings can grant it now.
+        if (!shouldShowRequestPermissionRationale(Manifest.permission.BLUETOOTH_CONNECT)) {
+            AlertDialog.Builder(this)
+                .setMessage(getString(R.string.bt_permission_needed) + "\n\n" + getString(R.string.bt_permission_settings))
+                .setPositiveButton(R.string.btn_app_settings) { _, _ ->
+                    try {
+                        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
+                    } catch (_: Exception) {}
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        } else {
+            toast(getString(R.string.bt_permission_needed))
+        }
+    }
+
+    @Deprecated("Activity result API; this app has no AndroidX")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_BT_ON && resultCode == RESULT_OK) pickBluetooth(pickingForKitchen)
+    }
+
+    private fun readBill(): PrinterTarget = if (billKind.checkedRadioButtonId == R.id.billBt) billBt.copy(
+        host = printerIp.text.toString().trim().ifEmpty { Prefs.DEF_PRINTER_IP },
+        port = printerPort.text.toString().trim().toIntOrNull() ?: Prefs.DEF_PRINTER_PORT,
+    ) else PrinterTarget(
+        bluetooth = false,
+        host = printerIp.text.toString().trim().ifEmpty { Prefs.DEF_PRINTER_IP },
+        port = printerPort.text.toString().trim().toIntOrNull() ?: Prefs.DEF_PRINTER_PORT,
+        btAddress = billBt.btAddress,
+        btName = billBt.btName,
+    )
+
+    private fun readKitchen(): KitchenPrinter {
+        val k = kitchenKind.checkedRadioButtonId
+        return KitchenPrinter(
+            sameAsBill = k == R.id.kitchenSame,
+            target = PrinterTarget(
+                bluetooth = k == R.id.kitchenBt,
+                host = kitchenIp.text.toString().trim(),
+                port = kitchenPort.text.toString().trim().toIntOrNull() ?: Prefs.DEF_PRINTER_PORT,
+                btAddress = kitchenBt.btAddress,
+                btName = kitchenBt.btName,
+            ),
+            width = if (kitchenPaper.checkedRadioButtonId == R.id.kitchenPaper58) 32 else Prefs.DEF_WIDTH,
+        )
+    }
+
     private fun fillShop() {
         val shop = Prefs.shop(this)
         paper.check(if (shop.width == 32) R.id.paper58 else R.id.paper80)
@@ -109,6 +295,7 @@ class SettingsActivity : Activity() {
         phone.setText(shop.phone)
         gstin.setText(shop.gstin)
         footer.setText(shop.footer)
+        renderPrinters()
     }
 
     private fun readShop() = Prefs.Shop(
@@ -123,16 +310,21 @@ class SettingsActivity : Activity() {
         brand = printBrand.isChecked,
     )
 
-    private fun readPrinter(): Pair<String, Int> = Pair(
-        printerIp.text.toString().trim().ifEmpty { Prefs.DEF_PRINTER_IP },
-        printerPort.text.toString().trim().toIntOrNull() ?: Prefs.DEF_PRINTER_PORT,
-    )
+    /** Why a printer setting can't be saved as it is, or null. */
+    private fun problem(t: PrinterTarget): String? = when {
+        t.bluetooth -> if (t.ready) null else getString(R.string.bt_choose_first)
+        !looksLikeHost(t.host) -> getString(R.string.bad_ip)
+        t.port !in 1..65535 -> getString(R.string.bad_port)
+        else -> null
+    }
 
     private fun save(quiet: Boolean = false): Boolean {
-        val (ip, port) = readPrinter()
-        if (!looksLikeHost(ip)) { if (!quiet) toast(getString(R.string.bad_ip)); return false }
-        if (port !in 1..65535) { if (!quiet) toast(getString(R.string.bad_port)); return false }
-        Prefs.save(this, ip, port, readShop())
+        val bill = readBill()
+        val kitchen = readKitchen()
+        val shop = readShop()
+        val bad = problem(bill) ?: if (shop.printParchi && !kitchen.sameAsBill) problem(kitchen.target) else null
+        if (bad != null) { if (!quiet) toast(bad); return false }
+        Prefs.save(this, bill, kitchen, shop)
         if (Prefs.saveSync(this, serverUrl.text.toString(), syncKey.text.toString())) Sync.forget(this)
         if (!quiet) toast(getString(R.string.toast_saved))
         return true
@@ -143,11 +335,14 @@ class SettingsActivity : Activity() {
         s.isNotBlank() && s.length <= 253 && Regex("^[A-Za-z0-9.\\-]+$").matches(s)
 
     /** Saves first, so the test uses exactly what is on screen. */
-    private fun testPrint() {
+    private fun testPrint(kitchen: Boolean) {
         if (!save(quiet = false)) return
-        val (ip, port) = readPrinter()
-        Printer.send(this, "test print", Escpos.test(readShop())) { err ->
-            toast(if (err == null) getString(R.string.test_ok, ip, port) else getString(R.string.test_fail, ip, port, err))
+        val shop = readShop()
+        val k = readKitchen()
+        val target = if (kitchen && !k.sameAsBill) k.target else readBill()
+        val width = if (kitchen && !k.sameAsBill) k.width else shop.width
+        Printer.send(this, target, "test print", Escpos.test(shop.copy(width = width))) { err ->
+            toast(if (err == null) getString(R.string.test_ok, target.label) else getString(R.string.test_fail, target.label, err))
             logView.text = PrintLog.text()
         }
     }
@@ -219,4 +414,9 @@ class SettingsActivity : Activity() {
     } catch (_: Exception) { "?" }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+
+    companion object {
+        private const val REQ_BT_PERMISSION = 31
+        private const val REQ_BT_ON = 32
+    }
 }
