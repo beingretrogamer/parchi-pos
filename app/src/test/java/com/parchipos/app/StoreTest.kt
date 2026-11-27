@@ -151,6 +151,26 @@ class StoreTest {
         assertTrue(Store.bill(c, s.uid)!!.fieldTimes.getValue("payment") > s.updatedAt)
     }
 
+    @Test fun anEditAlwaysLandsAfterTheStateItChanged() {
+        // Rung up on a phone whose clock is an hour ahead of this one's.
+        val ahead = System.currentTimeMillis() + 3_600_000
+        val s = sale(1).copy(updatedAt = ahead, fieldTimes = Bills.allGroups(ahead))
+        Sales.record(c, s)
+        Sales.setVoided(c, s.uid, true, "Wrong item")
+        val v = Store.bill(c, s.uid)!!
+        assertTrue(v.updatedAt > ahead)
+        assertTrue("the void must win a merge against the state it was made on", v.fieldTimes.getValue("void") > ahead)
+        val merged = Protocol.merge("bill",
+            Protocol.Version(s.updatedAt, s.fieldTimes, "dev_other", false, Bills.toData(s, null)),
+            Protocol.Version(v.updatedAt, v.fieldTimes, "dev_me", false, Bills.toData(v, null)))
+        assertTrue(merged.data.getBoolean("voided"))
+
+        val r = Receipt(uid = "r-ahead", time = ahead, customer = "Ramesh", amount = 50.0, updatedAt = ahead)
+        Ledger.record(c, r)
+        Ledger.setReceiptVoided(c, r.uid, true, "Typo")
+        assertTrue(Store.receipt(c, r.uid)!!.fieldTimes.getValue("void") > ahead)
+    }
+
     @Test fun movingADayTakesTheNextTokenThereAndStampsTheDate() {
         Sales.record(c, sale(1))
         val next = Calendar.getInstance().apply { timeInMillis = day; add(Calendar.DAY_OF_MONTH, 1) }.timeInMillis

@@ -73,7 +73,8 @@ object Ledger {
     fun setReceiptVoided(c: Context, uid: String, voided: Boolean, reason: String) {
         Store.tx(c) {
             val r = Store.receipt(c, uid) ?: return@tx
-            val now = System.currentTimeMillis()
+            // After the state it changes, whatever this phone's clock says (see Sales.editTime).
+            val now = maxOf(System.currentTimeMillis(), r.updatedAt + 1, (r.fieldTimes.values.maxOrNull() ?: 0) + 1)
             Store.saveReceipt(c, r.copy(
                 voided = voided, voidReason = if (voided) reason else "", updatedAt = now,
                 fieldTimes = r.fieldTimes.ifEmpty { Receipts.allGroups(r.updatedAt) } + ("void" to now),

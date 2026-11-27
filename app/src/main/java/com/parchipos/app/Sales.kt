@@ -115,10 +115,17 @@ object Sales {
     private fun edit(c: Context, uid: String, group: String, change: (Sale) -> Sale) {
         Store.tx(c) {
             val s = Store.bill(c, uid) ?: return@tx
-            val now = System.currentTimeMillis()
+            val now = editTime(s)
             Store.saveBill(c, change(s).copy(updatedAt = now, fieldTimes = stamp(s, group, now)))
         }
     }
+
+    /**
+     * When an edit happens: now, but always after the state it was made on.
+     * Another phone's clock may be ahead of this one's, and an edit stamped
+     * earlier than the bill it changed would lose every merge.
+     */
+    internal fun editTime(s: Sale): Long = maxOf(System.currentTimeMillis(), s.updatedAt + 1, (s.fieldTimes.values.maxOrNull() ?: 0) + 1)
 
     /** The bill's group times with [group] moved to [now]. */
     private fun stamp(s: Sale, group: String, now: Long): Map<String, Long> =
@@ -181,7 +188,7 @@ object Sales {
         if (key == old.day) return@tx old
         // Next token of the same phone on that day, keeping its letter.
         val token = maxToken(c, key, old.phone, old.letter) + 1
-        val now = System.currentTimeMillis()
+        val now = editTime(old)
         val moved = old.copy(
             id = billId(time, old.letter, token),
             token = token,
