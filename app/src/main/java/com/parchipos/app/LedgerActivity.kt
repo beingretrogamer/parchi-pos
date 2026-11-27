@@ -208,7 +208,7 @@ class LedgerActivity : Activity() {
     private fun printReceipt(r: Receipt) {
         val shop = Prefs.shop(this)
         val after = Ledger.statement(this, r.customer).find { it.receipt?.uid == r.uid }?.balance ?: Ledger.balance(this, r.customer)
-        Printer.send(this, "receipt ${r.customer}", Escpos.receipt(shop, r, after)) { err ->
+        Printer.send(this, Prefs.billPrinter(this), "receipt ${r.customer}", Escpos.receipt(shop, r, after)) { err ->
             toast(if (err == null) getString(R.string.receipt_printed) else getString(R.string.reprint_failed, err))
         }
     }

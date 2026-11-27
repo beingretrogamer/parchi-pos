@@ -1,43 +1,49 @@
 package com.parchipos.app
 
+import android.content.Context
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 
 /**
- * The single path to the printer.
+ * The single path to the printers.
  *
- * Everything that opens a socket to the printer goes through here, because a
- * typical ESC/POS printer accepts one connection at a time — two at once and
- * the second either fails or its bytes interleave with the first, and both
- * slips come out unreadable. A sale, a reprint from Sales and a Test print
- * can all be in flight together; this makes them take turns.
+ * Everything that opens a connection to a printer goes through here, because
+ * a typical ESC/POS printer accepts one connection at a time — two at once
+ * and the second either fails or its bytes interleave with the first, and
+ * both slips come out unreadable. A sale, a reprint from Sales and a Test
+ * print can all be in flight together; this makes them take turns, per
+ * printer, so the kitchen printer never waits on the bill printer.
  */
 object PrinterQueue {
 
-    private val lock = ReentrantLock(true)
+    private val locks = ConcurrentHashMap<String, ReentrantLock>()
 
-    private const val QUEUE_WAIT_MS = 15_000L
+    /** A Bluetooth connect that fails takes ~12 s a try, so the next job waits longer. */
+    private const val QUEUE_WAIT_MS = 45_000L
     private const val CONNECT_RETRIES = 2
     private const val RETRY_BACKOFF_MS = 700L
 
     /**
      * Blocking. Throws if the printer could not be reached, or if another job
-     * held the queue for too long.
+     * held that printer for too long.
      */
     fun send(
-        ip: String,
-        port: Int,
+        c: Context,
+        target: PrinterTarget,
         bytes: ByteArray,
         timeoutMs: Int = 5000,
         onLog: (String) -> Unit = {},
     ) {
+        val lock = locks.getOrPut(target.key) { ReentrantLock(true) }
         if (!lock.tryLock(QUEUE_WAIT_MS, TimeUnit.MILLISECONDS)) {
             throw IllegalStateException("printer busy with another job")
         }
         try {
-            sendWithRetry(ip, port, bytes, timeoutMs, onLog)
+            if (target.bluetooth) BtPrinter.send(c, target.btAddress, bytes, onLog)
+            else sendWithRetry(target.host, target.port, bytes, timeoutMs, onLog)
         } finally {
             lock.unlock()
         }

@@ -50,6 +50,11 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
           echo "path=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
 
+      # Pure-Kotlin tests (print routing, summaries). Fast, and the only
+      # check this app gets before a phone runs it.
+      - name: Unit tests
+        run: gradle testDebugUnitTest --no-daemon --stacktrace
+
       - name: Build APK
         env:
           KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}

@@ -181,12 +181,9 @@ class SalesActivity : Activity() {
     private fun reprint(s: Sale, bill: Boolean, parchi: Boolean) {
         // The parchi toggle in Settings governs new sales; an explicit
         // "reprint parchi" should print one even with it switched off.
-        val shop = Prefs.shop(this)
-        var bytes = ByteArray(0)
-        if (bill) bytes += Escpos.bill(shop, s)
-        if (parchi) bytes += Escpos.parchi(shop, s)
-        Printer.send(this, "reprint token ${s.label}", bytes) { err ->
-            toast(if (err == null) getString(R.string.reprint_ok, s.label) else getString(R.string.reprint_failed, err))
+        Printer.sale(this, s, bill, parchi) { failed ->
+            toast(if (failed.isEmpty()) getString(R.string.reprint_ok, s.label)
+                else getString(R.string.reprint_failed, failed.joinToString("; ") { "${it.printer}: ${it.reason}" }))
         }
     }
 
