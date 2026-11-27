@@ -133,7 +133,64 @@ and has nothing listening on a port.
   reason, item, qty, rate, amount, bill discount, discount reason and bill
   total.
 
+## Parchi Cloud
+
+Every phone of a shop shares one set of bills, payments, customers and one
+menu through Parchi Cloud. The till never waits for the internet: a bill is
+saved and printed first, and goes up when the phone is online.
+
+**Connecting a phone:**
+
+1. The owner makes a code in the portal: **Phones → Add a phone**.
+2. On the phone, open **Settings → Parchi Cloud**, type the code and a name
+   for the phone ("Counter"), and press **Connect**.
+
+What happens on connect:
+
+- **Uploads.** This phone's own bills and all its dues payments go up.
+  Bills it saw from other phones (through IceCreamOS) stay where they are;
+  each phone uploads its own.
+- **Its letter.** It keeps its old letter if it's free.
+- **Menu.**
+  - If the account already has a menu, it replaces the phone's. The old one
+    is kept in `menu.backup.json`.
+  - If the account has none yet, the Parchi Cloud screen offers to upload
+    the phone's menu. That needs an owner's or manager's PIN.
+- **Bill header.** It works the same way as the menu.
+- **Customers.** Every credit name becomes a customer. The id comes from the
+  name, so two phones that know "Ramesh" make the same customer.
+
+From then on:
+
+- **Sync timing.** It syncs every 10 seconds while the app is open and right
+  after every change. If bills are still waiting when the app closes, they go
+  as soon as there is network.
+- **Status dot.** The dot in the till's header is green when everything is
+  up. It turns amber with a count when bills are waiting, and red when sync
+  has stopped. Tap it for details.
+- **Other phones' bills** appear in Sales, with the phone's name.
+- **Edits on two phones both survive.** A void on one phone and a payment
+  change on another are separate edits. If two phones edit the same thing,
+  the later edit wins.
+- **Invoice numbers.** New bills get one, like `A/26-27/000123`, printed
+  under the token. Each phone has its own series per financial year, so
+  phones never clash, even offline.
+- **Menu and bill header** come from the account and are edited in the
+  portal. Managers will be able to edit them on the phone with their PIN in
+  the next update.
+- **Clock.** Times follow Parchi Cloud's clock, so a phone with a wrong
+  clock still files bills on the right day.
+- **History.** A new phone downloads the last 90 days plus every credit bill
+  and payment. Opening an older day in Sales fetches it.
+
+**Disconnect this phone**, at the bottom of the Parchi Cloud screen, turns it
+back into a till of its own and keeps everything on it. Remove it in the
+portal as well, to free its place on the licence.
+
 ## Cloud sync (IceCreamOS)
+
+*For phones not connected to Parchi Cloud. Connecting a phone to Parchi
+Cloud switches IceCreamOS sync off for it.*
 
 Every bill can also go to IceCreamOS, where it becomes an ordinary retail sale:
 stock is deducted, and the sale, payment and accounts are booked.
@@ -231,3 +288,12 @@ The unit tests include the Parchi Cloud protocol fixtures in
 the phone and the server must pass the same merge, totals and invoice cases.
 The store tests run on real SQLite through Robolectric, a test-only dependency
 that never reaches the APK.
+
+Two tests run the app's real sync code and screens against a real Parchi
+Cloud server, and are skipped unless one is given (CI skips them):
+
+```bash
+# in parchi-cloud: npm run dev   (and an admin login on it)
+PARCHI_E2E_URL=http://127.0.0.1:8787 PARCHI_E2E_ADMIN=admin PARCHI_E2E_PASSWORD=… \
+  gradle testDebugUnitTest --tests '*E2ETest*'
+```

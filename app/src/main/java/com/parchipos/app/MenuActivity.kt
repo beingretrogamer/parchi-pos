@@ -32,17 +32,27 @@ class MenuActivity : Activity() {
         render()
     }
 
+    /** Connected, the menu is the account's: shown here, edited in the portal (managers here with a PIN, next update). */
+    private val readOnly: Boolean get() = Cloud.connected(this)
+
     private fun render() {
         val items = Menu.all(this)
         noItems.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
         itemList.removeAllViews()
+        for (id in listOf(R.id.btnAdd, R.id.btnPaste, R.id.btnReset)) findViewById<View>(id).visibility = if (readOnly) View.GONE else View.VISIBLE
+        if (readOnly) itemList.addView(TextView(this).apply {
+            text = getString(R.string.menu_from_cloud)
+            textSize = 13f
+            setTextColor(getColor(R.color.accent))
+            setPadding(0, 0, 0, dp(12))
+        })
         items.forEach { item ->
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 minimumHeight = dp(56)
                 setBackgroundResource(R.drawable.row_bg)
-                setOnClickListener { edit(item) }
+                if (!readOnly) setOnClickListener { edit(item) }
             }
             val label = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             label.addView(TextView(this).apply {
@@ -61,8 +71,10 @@ class MenuActivity : Activity() {
             })
             row.addView(label, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             // Items move within their category, which is how the till lists them.
-            row.addView(arrow("↑", enabled = Menu.canMove(items, item, -1)) { Menu.move(this, item.id, -1); render() })
-            row.addView(arrow("↓", enabled = Menu.canMove(items, item, 1)) { Menu.move(this, item.id, 1); render() })
+            if (!readOnly) {
+                row.addView(arrow("↑", enabled = Menu.canMove(items, item, -1)) { Menu.move(this, item.id, -1); render() })
+                row.addView(arrow("↓", enabled = Menu.canMove(items, item, 1)) { Menu.move(this, item.id, 1); render() })
+            }
             itemList.addView(row)
         }
     }

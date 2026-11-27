@@ -83,7 +83,27 @@ object Prefs {
         val brand: Boolean,
     )
 
+    /**
+     * What the bill says, and how it prints. Connected to Parchi Cloud, the
+     * header (name, address, phone, GSTIN, footer, logo) is the outlet's, set
+     * in the portal; paper and print options stay this phone's own.
+     */
     fun shop(c: Context): Shop {
+        val local = localShop(c)
+        val h = if (Cloud.connected(c)) Cloud.outlet(c)?.optJSONObject("header") else null
+        if (h == null || Store.get(c, "cloud.headerChoice") == "ask") return local
+        return local.copy(
+            name = h.optString("shopName", "").ifBlank { Cloud.outlet(c)?.optString("name") ?: local.name },
+            address = h.optString("address", ""),
+            phone = h.optString("phone", ""),
+            gstin = h.optString("gstin", ""),
+            footer = h.optString("footer", ""),
+            brand = h.optBoolean("logo", local.brand),
+        )
+    }
+
+    /** This phone's own settings, as typed in Settings. */
+    fun localShop(c: Context): Shop {
         val p = p(c)
         return Shop(
             p.getString("shopName", "")!!,

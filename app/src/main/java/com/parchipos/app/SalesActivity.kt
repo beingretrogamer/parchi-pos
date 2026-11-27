@@ -16,6 +16,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlin.concurrent.thread
 
 /**
  * One day's takings, the bills behind them, and the way out to a spreadsheet.
@@ -73,7 +74,13 @@ class SalesActivity : Activity() {
     private var unsynced: Set<String> = emptySet()
 
     private fun load(kick: Boolean = true) {
-        sales = Sales.forDay(this, SimpleDateFormat("yyyyMMdd", Locale.US).format(day.time)).sortedByDescending { it.time }
+        val shownDay = SimpleDateFormat("yyyyMMdd", Locale.US).format(day.time)
+        // A day older than this phone's first download: fetch it, then show it.
+        if (SyncEngine.needsFetch(this, shownDay)) {
+            toast(getString(R.string.loading_day))
+            thread { if (SyncEngine.loadDay(this, shownDay)) runOnUiThread { if (!isFinishing) load(kick = false) } }
+        }
+        sales = Sales.forDay(this, shownDay).sortedByDescending { it.time }
         // load() follows every edit here, so this is also what sends one; when
         // the sync finishes, other phones' bills and edits are shown too.
         if (Sync.configured(this)) {

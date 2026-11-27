@@ -178,7 +178,12 @@ class LedgerActivity : Activity() {
                 d == null || d < 0 -> discount.error = getString(R.string.err_price)
                 a + d <= 0 -> amount.error = getString(R.string.err_amount)
                 else -> {
+                    val at = Cloud.now(this)
                     val r = Receipt(
+                        time = at,
+                        updatedAt = at,
+                        deviceId = Cloud.me(this)?.deviceId,
+                        customerId = Customers.ensure(this, name),
                         customer = name,
                         amount = a,
                         discount = d,

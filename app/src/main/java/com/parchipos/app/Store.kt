@@ -240,6 +240,139 @@ object Store {
         dirty = cur.getInt(cur.getColumnIndexOrThrow("dirty")) == 1,
     )
 
+    // ── sync bookkeeping ────────────────────────────────────────────────
+
+    /** A row as the sync engine sees it: the record, its times, and whether a local edit is unsent. */
+    data class Raw(
+        val table: String,
+        val kind: String,
+        val id: String,
+        val data: JSONObject,
+        val updatedAt: Long,
+        val fieldTimes: Map<String, Long>?,
+        val deleted: Boolean,
+        val dirty: Boolean,
+        val seq: Long,
+        val byUser: String? = null,
+        val proof: String? = null,
+        val outletId: String? = null,
+    )
+
+    fun tableOf(kind: String) = when (kind) {
+        "bill" -> "bills"
+        "receipt" -> "receipts"
+        else -> "records"
+    }
+
+    fun raw(c: Context, kind: String, id: String): Raw? = when (val t = tableOf(kind)) {
+        "records" -> record(c, kind, id)?.let { Raw(t, kind, id, it.data, it.updatedAt, null, it.deleted, it.dirty, it.seq, it.byUser, it.proof, it.outletId) }
+        else -> db(c).rawQuery("SELECT data, updated_at, field_times, dirty, seq FROM $t WHERE id = ?", arrayOf(id)).use {
+            if (!it.moveToFirst()) null
+            else Raw(t, kind, id, JSONObject(it.getString(0)), it.getLong(1), times(it.getString(2)), false, it.getInt(3) == 1, it.getLong(4))
+        }
+    }
+
+    /**
+     * Local edits Parchi Cloud hasn't acknowledged, oldest first: customers
+     * and the menu (few) ahead of payments and bills (many), and never the
+     * server's own kinds.
+     */
+    fun outbox(c: Context, limit: Int): List<Raw> {
+        val out = ArrayList<Raw>()
+        db(c).rawQuery(
+            """SELECT * FROM records WHERE dirty = 1 AND kind IN ('customer','category','menuItem','itemStatus','outlet','rules')
+               ORDER BY CASE kind WHEN 'customer' THEN 0 WHEN 'category' THEN 1 ELSE 2 END, updated_at LIMIT ?""",
+            arrayOf(limit.toString()),
+        ).use { cur -> while (cur.moveToNext()) rec(cur).let { out.add(Raw("records", it.kind, it.id, it.data, it.updatedAt, null, it.deleted, true, it.seq, it.byUser, it.proof, it.outletId)) } }
+        for ((t, kind) in listOf("receipts" to "receipt", "bills" to "bill")) {
+            if (out.size >= limit) break
+            db(c).rawQuery("SELECT id, data, updated_at, field_times, seq FROM $t WHERE dirty = 1 ORDER BY updated_at LIMIT ?", arrayOf((limit - out.size).toString())).use { cur ->
+                while (cur.moveToNext()) out.add(Raw(t, kind, cur.getString(0), JSONObject(cur.getString(1)), cur.getLong(2), times(cur.getString(3)), false, true, cur.getLong(4)))
+            }
+        }
+        return out
+    }
+
+    fun outboxCount(c: Context): Int = db(c).rawQuery(
+        """SELECT (SELECT COUNT(*) FROM bills WHERE dirty = 1) + (SELECT COUNT(*) FROM receipts WHERE dirty = 1)
+             + (SELECT COUNT(*) FROM records WHERE dirty = 1 AND kind IN ('customer','category','menuItem','itemStatus','outlet','rules'))""",
+        null,
+    ).use { it.moveToFirst(); it.getInt(0) }
+
+    /**
+     * The server has [seq] for what was sent. Clean only if the row is still
+     * the state that was sent: an edit made meanwhile must still go.
+     */
+    fun markSent(c: Context, kind: String, id: String, sentUpdatedAt: Long, seq: Long) {
+        val t = tableOf(kind)
+        val where = if (t == "records") "kind = ? AND id = ? AND updated_at = ?" else "id = ? AND updated_at = ?"
+        val args = if (t == "records") arrayOf(kind, id, sentUpdatedAt.toString()) else arrayOf(id, sentUpdatedAt.toString())
+        db(c).update(t, ContentValues().apply { put("dirty", 0); put("seq", seq); putNull("sync_error") }, where, args)
+    }
+
+    /** The server refused it: kept, marked, and no longer retried. */
+    fun markRejected(c: Context, kind: String, id: String, reason: String) {
+        val t = tableOf(kind)
+        val (where, args) = if (t == "records") "kind = ? AND id = ?" to arrayOf(kind, id) else "id = ?" to arrayOf(id)
+        db(c).update(t, ContentValues().apply { put("dirty", 0); put("sync_error", reason.take(200)) }, where, args)
+    }
+
+    /** Rows the server refused, newest first, for the Parchi Cloud screen and diagnostics. */
+    fun rejected(c: Context, limit: Int = 20): List<String> = db(c).rawQuery(
+        """SELECT 'Bill ' || bill_no || ': ' || sync_error, updated_at FROM bills WHERE sync_error IS NOT NULL
+           UNION ALL SELECT 'Payment ' || customer || ': ' || sync_error, updated_at FROM receipts WHERE sync_error IS NOT NULL
+           UNION ALL SELECT kind || ' ' || id || ': ' || sync_error, updated_at FROM records WHERE sync_error IS NOT NULL
+           ORDER BY 2 DESC LIMIT ?""",
+        arrayOf(limit.toString()),
+    ).use { cur -> buildList { while (cur.moveToNext()) add(cur.getString(0)) } }
+
+    /** A bill exactly as the server holds it (or as merged), with this phone's display name for its phone. */
+    fun putBillRecord(c: Context, id: String, data: JSONObject, updatedAt: Long, fieldTimes: Map<String, Long>?, seq: Long, dirty: Boolean, phone: String) {
+        val s = Bills.fromData(id, phone, data, updatedAt, fieldTimes ?: emptyMap())
+        db(c).insertWithOnConflict("bills", null, ContentValues().apply {
+            put("id", id)
+            put("bill_no", s.id)
+            put("day", data.optString("day").ifEmpty { s.day })
+            put("time", s.time)
+            put("letter", s.letter)
+            put("token", s.token)
+            put("phone", phone)
+            put("payment", s.payment)
+            put("customer", s.customer)
+            put("customer_id", s.customerId)
+            put("voided", if (s.voided) 1 else 0)
+            put("total", Bills.totalPaise(data))
+            put("data", data.toString())
+            put("updated_at", updatedAt)
+            put("field_times", fieldTimes?.let { JSONObject(it as Map<*, *>).toString() })
+            put("seq", seq)
+            put("dirty", if (dirty) 1 else 0)
+            putNull("sync_error")
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun putReceiptRecord(c: Context, id: String, data: JSONObject, updatedAt: Long, fieldTimes: Map<String, Long>?, seq: Long, dirty: Boolean) {
+        db(c).insertWithOnConflict("receipts", null, ContentValues().apply {
+            put("id", id)
+            put("day", data.optString("day"))
+            put("time", data.optLong("time"))
+            put("customer", data.optString("customer", ""))
+            put("customer_id", data.optStringOrNull("customerId"))
+            put("voided", if (data.optBoolean("voided", false)) 1 else 0)
+            put("data", data.toString())
+            put("updated_at", updatedAt)
+            put("field_times", fieldTimes?.let { JSONObject(it as Map<*, *>).toString() })
+            put("seq", seq)
+            put("dirty", if (dirty) 1 else 0)
+            putNull("sync_error")
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun deleteRow(c: Context, kind: String, id: String) {
+        val t = tableOf(kind)
+        if (t == "records") db(c).delete(t, "kind = ? AND id = ?", arrayOf(kind, id)) else db(c).delete(t, "id = ?", arrayOf(id))
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────
 
     /** prefix + 16 hex characters of SHA-256: the same input gives the same id on every phone. */

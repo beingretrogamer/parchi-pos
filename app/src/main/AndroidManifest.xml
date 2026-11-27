@@ -15,7 +15,9 @@
     <!-- Not required: Wi-Fi printers work on a phone without Bluetooth. -->
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
+    <!-- ParchiApp keeps Parchi Cloud sync going while the app is in use. -->
     <application
+        android:name=".ParchiApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -54,6 +56,18 @@
             android:name=".LedgerActivity"
             android:exported="false"
             android:label="@string/title_ledger" />
+
+        <activity
+            android:name=".CloudActivity"
+            android:exported="false"
+            android:label="@string/title_cloud"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+
+        <!-- Sends waiting bills when the phone gets network, with the app closed. -->
+        <service
+            android:name=".SyncJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <activity
             android:name=".SettingsActivity"

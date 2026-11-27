@@ -90,6 +90,10 @@ class SettingsActivity : Activity() {
         syncKey.setText(Prefs.syncKey(this))
         serverUrl.setText(Prefs.serverUrl(this))
         findViewById<Button>(R.id.btnSyncNow).setOnClickListener { syncNow() }
+        findViewById<Button>(R.id.btnOpenCloud).setOnClickListener {
+            save(quiet = true)
+            startActivity(android.content.Intent(this, CloudActivity::class.java))
+        }
 
         fillPrinters()
         // The exact bitmap the bill prints, so there is no surprise at the printer.
@@ -125,7 +129,35 @@ class SettingsActivity : Activity() {
     override fun onResume() {
         super.onResume()
         logView.text = PrintLog.text().ifEmpty { getString(R.string.no_activity) }
+        renderCloud()
         renderSync()
+    }
+
+    /**
+     * Connected to Parchi Cloud: the bill header is the outlet's (read-only
+     * here, edited in the portal), and the IceCreamOS section goes away.
+     */
+    private fun renderCloud() {
+        val me = Cloud.me(this)
+        val entry = findViewById<TextView>(R.id.cloudEntry)
+        entry.text = if (me == null) getString(R.string.cloud_entry_off) else getString(R.string.cloud_entry_on, me.accountName, me.outletName) + "\n" + when (Cloud.status(this).state) {
+            Cloud.State.LIVE -> getString(R.string.state_live)
+            Cloud.State.WAITING -> getString(R.string.state_waiting, Cloud.status(this).outbox)
+            Cloud.State.OFFLINE -> getString(R.string.state_offline, Cloud.status(this).outbox)
+            Cloud.State.UPGRADE -> getString(R.string.state_upgrade)
+            Cloud.State.REMOVED -> getString(R.string.state_removed)
+            else -> getString(R.string.state_error)
+        }
+        findViewById<View>(R.id.iceCreamCard).visibility = if (me == null) View.VISIBLE else View.GONE
+        val cloudHeader = me != null && Cloud.outlet(this) != null && Store.get(this, "cloud.headerChoice") != "ask"
+        val note = findViewById<TextView>(R.id.headerNote)
+        note.visibility = if (cloudHeader) View.VISIBLE else View.GONE
+        if (cloudHeader) note.text = getString(R.string.header_from_cloud, me!!.outletName)
+        val shown = if (cloudHeader) Prefs.shop(this) else Prefs.localShop(this)
+        for ((field, value) in listOf(shopName to shown.name, address to shown.address, phone to shown.phone, gstin to shown.gstin, footer to shown.footer)) {
+            field.isEnabled = !cloudHeader
+            if (cloudHeader || !field.hasFocus()) field.setText(value)
+        }
     }
 
     /** Leaving with Back keeps what was typed — losing it would be the surprise. */
@@ -285,7 +317,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun fillShop() {
-        val shop = Prefs.shop(this)
+        val shop = Prefs.localShop(this)
         paper.check(if (shop.width == 32) R.id.paper58 else R.id.paper80)
         printParchi.isChecked = shop.printParchi
         smallPrint.isChecked = shop.small
@@ -321,7 +353,8 @@ class SettingsActivity : Activity() {
     private fun save(quiet: Boolean = false): Boolean {
         val bill = readBill()
         val kitchen = readKitchen()
-        val shop = readShop()
+        // Connected, the header on screen is the outlet's: this phone's own stays as it was.
+        val shop = if (Cloud.connected(this)) Prefs.localShop(this).let { l -> readShop().copy(name = l.name, address = l.address, phone = l.phone, gstin = l.gstin, footer = l.footer) } else readShop()
         val bad = problem(bill) ?: if (shop.printParchi && !kitchen.sameAsBill) problem(kitchen.target) else null
         if (bad != null) { if (!quiet) toast(bad); return false }
         Prefs.save(this, bill, kitchen, shop)

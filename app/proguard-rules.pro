@@ -7,6 +7,10 @@
 -keep class com.parchipos.app.MenuActivity { *; }
 -keep class com.parchipos.app.SalesActivity { *; }
 -keep class com.parchipos.app.SettingsActivity { *; }
+-keep class com.parchipos.app.LedgerActivity { *; }
+-keep class com.parchipos.app.CloudActivity { *; }
+-keep class com.parchipos.app.ParchiApp { *; }
+-keep class com.parchipos.app.SyncJob { *; }
 
 # Line numbers make a crash report from a shop phone worth reading.
 -keepattributes SourceFile,LineNumberTable
