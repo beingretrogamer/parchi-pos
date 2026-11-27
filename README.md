@@ -12,10 +12,14 @@ customer holding that bill collects the order. Tokens start again at 1 every
 morning.
 
 ```
-phone (this app)  ──TCP──▶  printer (192.168.x.x:9100)
+phone (this app)  ──TCP──────▶  Wi-Fi/LAN printer (192.168.x.x:9100)
+                  ──Bluetooth─▶  Bluetooth printer (paired in Android settings)
 ```
 
-There is no server, account or internet involved. Sales are stored on the
+The bill and the parchi can go to one printer, or to two: a bill printer at
+the counter and a kitchen printer. Either can be Wi-Fi/LAN or Bluetooth.
+
+No server, account or internet is needed to bill. Sales are stored on the
 phone and can be exported as CSV.
 
 Started as a copy of [escpos-print-bridge](https://github.com/beingretrogamer/escpos-print-bridge).
@@ -25,15 +29,29 @@ and has nothing listening on a port.
 
 ## Set up
 
-1. **Settings**: enter the printer IP and port (usually `9100`), choose 80 or
-   58 mm paper, then press **Test print**. The phone must be on the same Wi-Fi
-   as the printer.
-2. In the same screen, fill in the address, phone, optional GSTIN and
+1. **Settings → Printers → Bill printer**:
+   - **Wi-Fi / LAN**: enter the printer IP and port (usually `9100`). The phone
+     must be on the same Wi-Fi as the printer.
+   - **Bluetooth**: first pair the printer in Android's own Bluetooth settings
+     (the PIN is usually `0000` or `1234`). Then tap **Choose Bluetooth
+     printer** and pick it from the paired devices; likely printers are listed
+     first. On Android 12 and later the app asks once for the **Nearby
+     devices** permission. It never scans and never needs location.
+
+   Choose 80 or 58 mm paper (most Bluetooth printers are 58 mm), then press
+   **Test bill printer**.
+2. **Kitchen printer (for the parchi)**: leave it on **Same as the bill
+   printer** for one printer. Otherwise pick its own Wi-Fi/LAN or Bluetooth
+   printer and its paper, then press **Test kitchen printer**. With two
+   printers, each sale prints the bill at the counter and the parchi in the
+   kitchen at the same time. If one of them fails, **Retry** reprints only that
+   slip.
+3. In the same screen, fill in the address, phone, optional GSTIN and
    footer. These are printed at the top and bottom of the bill. The bill
    starts with a drawn Scoops & Sips logo (previewed in Settings). Turn it
    off to print the shop name as text instead. **Small print**, on by
    default, uses the printer's smaller font for shorter slips.
-3. **Menu**: the app starts with the TUB's × Scoops & Sips menu already
+4. **Menu**: the app starts with the TUB's × Scoops & Sips menu already
    loaded: 73 items in 16 categories, copied from the boards. Items with
    sizes or flavours are one tile each, and their price field reads
    `Half 40 / Full 80`. **Paste a list** takes one item per line in the same
@@ -75,8 +93,9 @@ and has nothing listening on a port.
   payment**, then Cash, UPI or Credit. The day's split and the customer's
   balance follow.
 - The sale is saved **before** anything prints, and the cart clears straight
-  away for the next customer. If the printer is off, the app offers **Retry**.
-  The sale is never lost, and you can reprint it later from **Sales**.
+  away for the next customer. If a printer is off or out of range, the app
+  says which slip didn't print and offers **Retry** for just that slip. The
+  sale is never lost, and you can reprint it later from **Sales**.
 
 ## Sales
 
