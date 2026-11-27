@@ -85,4 +85,9 @@ tasks.withType<Test>().configureEach {
     dependsOn(copyRobolectricRuntime)
     systemProperty("robolectric.offline", "true")
     systemProperty("robolectric.dependency.dir", robolectricDir.get().asFile.absolutePath)
+    // A failing test prints its whole exception, so a CI log is enough to diagnose it.
+    testLogging {
+        events("failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
 }
