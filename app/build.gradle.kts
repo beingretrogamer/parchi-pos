@@ -71,14 +71,17 @@ dependencies {
  * download can never fail a release build. Tests then run Robolectric offline.
  * Robolectric 4.14 needs both runtimes below; update them with Robolectric.
  */
-val robolectricRuntime: Configuration by configurations.creating
+// One configuration each: they are two versions of one module, and a shared
+// configuration would keep only the newer.
+val robolectricSdk34: Configuration by configurations.creating
+val robolectricSdk35: Configuration by configurations.creating
 dependencies {
-    robolectricRuntime("org.robolectric:android-all-instrumented:14-robolectric-10818077-i7") // SDK 34, the tests' @Config
-    robolectricRuntime("org.robolectric:android-all-instrumented:15-robolectric-12650502-i7") // the newest it knows, which loads the app package
+    robolectricSdk34("org.robolectric:android-all-instrumented:14-robolectric-10818077-i7") // the tests' @Config
+    robolectricSdk35("org.robolectric:android-all-instrumented:15-robolectric-12650502-i7") // the newest it knows, which loads the app package
 }
 val robolectricDir = layout.buildDirectory.dir("robolectric-runtime")
 val copyRobolectricRuntime by tasks.registering(Copy::class) {
-    from(robolectricRuntime)
+    from(robolectricSdk34, robolectricSdk35)
     into(robolectricDir)
 }
 tasks.withType<Test>().configureEach {
