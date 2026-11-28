@@ -366,11 +366,20 @@ object MenuBackups {
         java.io.File(c.filesDir, "menu.backup-$stamp.json").writeText(JSONObject().put("savedAt", now).put("account", account).put("items", list).toString())
     }
 
-    /** Newest first; empty or unreadable files are left out. */
+    /**
+     * The menus worth offering: the one from before Parchi Cloud first (the
+     * device's original), then the rest newest first. Empty or unreadable
+     * files are left out, and so is any that is the menu already on the till.
+     */
     fun list(c: Context): List<Saved> {
-        val files = c.filesDir.listFiles { f -> f.name == "menu.json.imported" || (f.name.startsWith("menu.backup") && f.name.endsWith(".json")) } ?: return emptyList()
-        return files.mapNotNull { read(c, it) }.filter { it.items.isNotEmpty() }.sortedByDescending { it.savedAt }
+        val files = c.filesDir.listFiles { f -> f.name == BEFORE_CLOUD || (f.name.startsWith("menu.backup") && f.name.endsWith(".json")) } ?: return emptyList()
+        val now = Menu.all(c).map { it.name to it.price }.toSet()
+        return files.mapNotNull { read(c, it) }
+            .filter { b -> b.items.isNotEmpty() && b.items.map { it.name to it.price }.toSet() != now }
+            .sortedWith(compareBy<Saved>({ it.file.name != BEFORE_CLOUD }, { -it.savedAt }))
     }
+
+    private const val BEFORE_CLOUD = "menu.json.imported"
 
     private fun read(c: Context, f: java.io.File): Saved? = try {
         val text = f.readText().trim()
@@ -388,7 +397,7 @@ object MenuBackups {
         }
         val account = wrapped?.optString("account")?.ifBlank { null }
         val title = when {
-            f.name == "menu.json.imported" -> c.getString(R.string.backup_before_cloud)
+            f.name == BEFORE_CLOUD -> c.getString(R.string.backup_before_cloud)
             account != null -> c.getString(R.string.backup_connecting_to, account)
             else -> c.getString(R.string.backup_connecting)
         }

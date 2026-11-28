@@ -217,11 +217,16 @@ class ProvenanceTest {
         connect(mine)
         CloudSetup.disconnect(c)
 
+        // The menu on the till now is the second backup's, so that one isn't offered.
+        assertEquals(1, MenuBackups.list(c).count { it.file.name.startsWith("menu.backup") })
+        Menu.replaceAll(c, listOf(MenuItem("", "Masala Chai", 20.0, "Drinks")))
         val saved = MenuBackups.list(c)
         assertEquals(3, saved.size)
-        assertEquals(listOf(listOf("Oreo Shake", "Cold Coffee"), listOf("Biscoff Waffle")), saved.filter { it.file.name.startsWith("menu.backup") }.map { b -> b.items.map { it.name } })
+        // The device's original comes first, whatever its date; then newest first.
+        assertEquals("menu.json.imported", saved.first().file.name)
+        assertEquals(listOf(listOf("Oreo Shake", "Cold Coffee"), listOf("Biscoff Waffle")), saved.drop(1).map { b -> b.items.map { it.name } })
         assertTrue(saved.any { it.title.contains("Scoops and Sips") })
-        val before = saved.single { it.file.name == "menu.json.imported" }
+        val before = saved.first()
 
         Menu.replaceAll(c, before.items)
         assertEquals(listOf("Vanilla", "Mango", "Cheese Balls"), Menu.all(c).map { it.name })
