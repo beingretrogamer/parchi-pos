@@ -42,6 +42,13 @@ class CloudActivity : ParchiActivity() {
             SyncEngine.kick(this)
         }
         findViewById<Button>(R.id.btnDisconnect).setOnClickListener { confirmDisconnect() }
+        findViewById<Button>(R.id.btnRetryRejected).setOnClickListener {
+            val me = Cloud.me(this) ?: return@setOnClickListener
+            val n = Store.retryRejected(this, me.deviceId)
+            toast(getString(R.string.retry_rejected, n))
+            findViewById<TextView>(R.id.stateDetail).text = getString(R.string.connecting)
+            SyncEngine.kick(this)
+        }
     }
 
     override fun onResume() {

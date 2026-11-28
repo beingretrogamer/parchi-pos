@@ -290,6 +290,8 @@
     <string name="phone_you">  (this device)</string>
     <string name="phone_removed">  (removed)</string>
     <string name="section_problems">NOT ACCEPTED BY PARCHI CLOUD</string>
+    <string name="btn_retry_rejected">Send again</string>
+    <string name="retry_rejected">Sending %1$d again</string>
     <string name="btn_disconnect">Disconnect this device</string>
     <string name="disconnect_confirm">Disconnect from %1$s?\n\nThis device keeps its own %2$d bills and %3$d dues payments, and the menu as it is now, and carries on as a till of its own.\n\nThe %4$d bills and %5$d payments that came down from the account come off this device. They stay in the account.\n\nThe owner should remove this device in the portal to free its slot.</string>
     <string name="disconnect_waiting">%1$d changes haven\'t uploaded yet and won\'t reach the account.</string>

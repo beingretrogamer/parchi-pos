@@ -328,7 +328,31 @@ object Store {
         db(c).update(t, ContentValues().apply { put("dirty", 0); put("seq", seq); putNull("sync_error") }, where, args)
     }
 
-    /** The server refused it: kept, marked, and no longer retried. */
+    /**
+     * Bills and payments the server refused go again: its rules may have
+     * changed since (old voids without a reason were refused until it learnt
+     * that bills from before the cloud never asked for one). Each keeps its
+     * reason until the server takes it. One rung up here that the server never
+     * took is stamped with this device's id first, as connecting does. Feed
+     * copies of other phones' bills never go. Returns how many will go.
+     */
+    fun retryRejected(c: Context, deviceId: String): Int = tx(c) { db ->
+        var n = 0
+        for (t in listOf("bills", "receipts")) {
+            val rows = db.rawQuery(
+                "SELECT id, data, seq, src FROM $t WHERE sync_error IS NOT NULL AND dirty = 0 AND NOT (src = ? AND seq = 0)",
+                arrayOf(Src.FEED),
+            ).use { cur -> buildList { while (cur.moveToNext()) add(listOf(cur.getString(0), cur.getString(1), cur.getLong(2).toString(), cur.getString(3))) } }
+            for ((id, data, seq, src) in rows) {
+                val v = ContentValues().apply { put("dirty", 1) }
+                if (seq == "0" && src == Src.OWN) v.put("data", JSONObject(data).put("deviceId", deviceId).toString())
+                n += db.update(t, v, "id = ?", arrayOf(id))
+            }
+        }
+        n
+    }
+
+    /** The server refused it: kept, marked, and not sent again until [retryRejected]. */
     fun markRejected(c: Context, kind: String, id: String, reason: String) {
         val t = tableOf(kind)
         val (where, args) = if (t == "records") "kind = ? AND id = ?" to arrayOf(kind, id) else "id = ?" to arrayOf(id)

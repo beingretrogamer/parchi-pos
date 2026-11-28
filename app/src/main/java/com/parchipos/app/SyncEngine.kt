@@ -46,6 +46,8 @@ object SyncEngine {
     private val listeners = CopyOnWriteArraySet<() -> Unit>()
     private val ui by lazy { Handler(Looper.getMainLooper()) }
     @Volatile private var diagSent = false
+    /** Refused bills and payments go again once each time the app starts ([Store.retryRejected]). */
+    @Volatile internal var retried = false
 
     /** Screens listen to refresh when a sync brought something or the status changed. Called on the main thread. */
     fun listen(l: () -> Unit) { listeners.add(l) }
@@ -88,6 +90,10 @@ object SyncEngine {
         val me = Cloud.me(c) ?: return "Not connected"
         return try {
             Store.put(c, "cloud.upgrade", null)
+            if (!retried) {
+                retried = true
+                Store.retryRejected(c, me.deviceId)
+            }
             var rounds = 0
             while (rounds++ < MAX_ROUNDS) {
                 // Read fresh each round: a rename in the portal changes this phone's name.

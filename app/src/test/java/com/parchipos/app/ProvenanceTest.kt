@@ -236,4 +236,80 @@ class ProvenanceTest {
         Menu.replaceAll(c, before.items)
         assertEquals(3, Menu.all(c).size)
     }
+
+    @Test fun feedCopiesShowWhileConnectedOnlyOnceTheAccountHasThem() {
+        file("sales.jsonl", listOf(
+            """{"id":"261120-001","token":1,"time":$t0,"payment":"CASH","customer":"","lines":[{"name":"Chai","price":20,"qty":1}],"uid":"u-own"}""",
+            """{"id":"261120-A005","token":5,"time":${t0 + 1},"payment":"CREDIT","customer":"Ramesh","lines":[{"name":"Chai","price":20,"qty":1}],"uid":"u-feed","letter":"A","phone":"Anil's Phone"}""",
+        ).joinToString("\n"))
+        val day = Store.bill(c, "u-own")!!.day
+        // On its own, the device shows everything it holds, as before.
+        assertEquals(setOf("u-own", "u-feed"), Sales.all(c).map { it.uid }.toSet())
+
+        // In an account it shows the account's sales: the feed copy isn't in it yet.
+        connect(mine)
+        assertEquals(listOf("u-own"), Sales.all(c).map { it.uid })
+        assertEquals(listOf("u-own"), Sales.forDay(c, day).map { it.uid })
+        assertTrue(Sales.onCredit(c).isEmpty())
+        assertEquals(Src.FEED, src("bills", "u-feed")) // still here, just not shown
+
+        // Anil's phone connects and uploads its own: the account's copy arrives and shows.
+        val anils = Bills.toData(sale("u-feed", t0 + 1, "A", "dev_anil", "Anil's Phone", payment = CREDIT, customer = "Ramesh"), null)
+        Store.tx(c) { SyncEngine.applyRecord(c, mine, record("bill", "u-feed", anils, 40, mine.outletId, "dev_anil")) }
+        assertEquals(setOf("u-own", "u-feed"), Sales.all(c).map { it.uid }.toSet())
+        assertEquals(listOf("u-feed"), Sales.onCredit(c).map { it.uid })
+
+        // Leaving shows every bill the device held before, the feed copy too.
+        CloudSetup.disconnect(c)
+        assertEquals(setOf("u-own", "u-feed"), Sales.all(c).map { it.uid }.toSet())
+    }
+
+    @Test fun refusedBillsGoAgainAndTakeThisDevicesId() {
+        Sales.record(c, sale("old-void", t0).copy(voided = true))
+        Sales.record(c, sale("fine", t0 + 1))
+        connect(mine)
+        var refuse = true
+        val sent = mutableListOf<JSONObject>()
+        CloudApi.transport = object : CloudApi.Transport {
+            override fun request(method: String, url: String, bearer: String?, body: String?): Pair<Int, String> {
+                val msgs = JSONObject(body ?: "{}").optJSONArray("messages") ?: JSONArray()
+                val changes = (0 until msgs.length()).map { msgs.getJSONObject(it) }.firstOrNull { it.optString("type") == "push" }?.getJSONArray("changes") ?: JSONArray()
+                val acks = JSONArray()
+                for (i in 0 until changes.length()) {
+                    val ch = changes.getJSONObject(i)
+                    sent += ch
+                    val ack = JSONObject().put("kind", ch.getString("kind")).put("id", ch.getString("id"))
+                    // The server as it was: a void needs a reason, even on a bill from before the cloud.
+                    if (refuse && ch.getJSONObject("data").optBoolean("voided")) ack.put("rejected", "a void needs a reason") else ack.put("seq", 100 + sent.size)
+                    acks.put(ack)
+                }
+                return 200 to JSONObject().put("protocol", 1).put("messages", JSONArray()
+                    .put(JSONObject().put("type", "hello").put("serverTime", System.currentTimeMillis()).put("invoiceSerials", JSONObject()))
+                    .put(JSONObject().put("type", "ack").put("results", acks))
+                    .put(JSONObject().put("type", "changes").put("records", JSONArray()).put("window", true).put("upTo", 5).put("last", 5).put("more", false))).toString()
+            }
+        }
+        SyncEngine.retried = true // this run is the app's first: nothing refused yet
+        assertEquals("", SyncEngine.runOnce(c))
+        assertEquals(listOf("Bill ${Store.bill(c, "old-void")!!.id}: a void needs a reason"), Store.rejected(c))
+        assertEquals(0, Store.outboxCount(c))
+        // Refused once, it isn't sent again by itself.
+        sent.clear()
+        assertEquals("", SyncEngine.runOnce(c))
+        assertTrue(sent.isEmpty())
+
+        // Say an earlier connection had left another device's id on it.
+        val stale = Store.raw(c, "bill", "old-void")!!.data.put("deviceId", "dev_slotA")
+        Store.db(c).execSQL("UPDATE bills SET data = ? WHERE id = 'old-void'", arrayOf(stale.toString()))
+        // The server learns better; the app starts again and sends it once more, as this device's.
+        refuse = false
+        SyncEngine.retried = false
+        assertEquals("", SyncEngine.runOnce(c))
+        assertEquals(listOf("old-void"), sent.map { it.getString("id") })
+        assertEquals(mine.deviceId, sent.single().getJSONObject("data").getString("deviceId"))
+        assertTrue(Store.rejected(c).isEmpty())
+        assertEquals(0, Store.outboxCount(c))
+        // Send again on the Parchi Cloud screen has nothing left to send.
+        assertEquals(0, Store.retryRejected(c, mine.deviceId))
+    }
 }
