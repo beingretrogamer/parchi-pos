@@ -3,7 +3,6 @@ package com.parchipos.app
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -105,10 +104,10 @@ class LockActivity : Activity() {
         }
         col.addView(TextView(this).apply {
             text = Prefs.shop(this@LockActivity).name.ifBlank { Wordmark.NAME }
-            typeface = Typeface.create("cursive", Typeface.BOLD)
+            typeface = Fonts.display(this@LockActivity)
             textSize = 30f
             gravity = Gravity.CENTER
-            setTextColor(getColor(R.color.accent))
+            setTextColor(getColor(R.color.ink))
         })
         col.addView(TextView(this).apply {
             text = getString(R.string.lock_title)

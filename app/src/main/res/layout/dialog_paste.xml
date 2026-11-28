@@ -21,7 +21,7 @@
         android:layout_height="200dp"
         android:layout_marginTop="10dp"
         android:background="@drawable/field"
-        android:fontFamily="monospace"
+        android:fontFamily="@font/plex_mono"
         android:gravity="top|start"
         android:hint="@string/paste_hint"
         android:importantForAutofill="no"

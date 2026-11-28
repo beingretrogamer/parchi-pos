@@ -31,7 +31,7 @@
                 android:background="@drawable/btn_primary"
                 android:text="@string/btn_add_item"
                 android:textAllCaps="false"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/on_accent"
                 android:textSize="15sp" />
 
             <Button

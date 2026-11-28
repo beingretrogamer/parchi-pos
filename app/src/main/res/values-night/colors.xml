@@ -1,18 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg">#14100D</color>
-    <color name="card">#1E1814</color>
-    <color name="ink">#F2EAE2</color>
-    <color name="ink_soft">#B5A797</color>
-    <color name="ink_faint">#7D6F63</color>
-    <color name="line">#33291F</color>
+    <color name="bg">#14110D</color>
+    <color name="bg_2">#1A1611</color>
+    <color name="card">#1E1914</color>
+    <color name="field_fill">#262019</color>
+    <color name="ink">#EFE8DC</color>
+    <color name="ink_soft">#C8BEAF</color>
+    <color name="ink_faint">#958A7B</color>
+    <color name="ink_hint">#6B6256</color>
+    <color name="line">#322B23</color>
+    <color name="line_strong">#463D32</color>
 
-    <color name="accent">#F97316</color>
-    <color name="accent_pressed">#EA580C</color>
-    <color name="accent_soft">#3A2416</color>
-    <color name="on_accent">#FFFFFF</color>
-    <color name="ok">#34D399</color>
-    <color name="warn">#F5B14C</color>
-    <color name="danger">#F97066</color>
-    <color name="field_fill">#18130F</color>
+    <color name="accent">#8E9CFF</color>
+    <color name="accent_pressed">#AAB5FF</color>
+    <color name="accent_soft">#22264A</color>
+    <color name="on_accent">#11132A</color>
+
+    <color name="ok">#6FCA94</color>
+    <color name="ok_soft">#16301F</color>
+    <color name="warn">#E9B24C</color>
+    <color name="warn_soft">#392B12</color>
+    <color name="danger">#FF7B5E</color>
+    <color name="danger_soft">#3B1D16</color>
 </resources>

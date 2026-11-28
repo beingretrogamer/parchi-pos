@@ -60,9 +60,9 @@
                 android:id="@+id/dayTotal"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:fontFamily="@font/fraunces_semibold"
                 android:textColor="@color/ink"
-                android:textSize="30sp"
-                android:textStyle="bold" />
+                android:textSize="40sp" />
 
             <TextView
                 android:id="@+id/daySplit"
@@ -78,7 +78,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:fontFamily="monospace"
+                android:fontFamily="@font/plex_mono"
                 android:lineSpacingExtra="2dp"
                 android:textColor="@color/ink_soft"
                 android:textSize="13sp" />

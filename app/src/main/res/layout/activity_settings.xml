@@ -468,7 +468,7 @@
             android:background="@drawable/btn_primary"
             android:text="@string/btn_save"
             android:textAllCaps="false"
-            android:textColor="#FFFFFF"
+            android:textColor="@color/on_accent"
             android:textSize="15sp"
             android:textStyle="bold" />
 
@@ -487,7 +487,7 @@
                 android:id="@+id/logView"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:fontFamily="monospace"
+                android:fontFamily="@font/plex_mono"
                 android:maxLines="40"
                 android:textColor="@color/ink_soft"
                 android:textSize="11sp" />

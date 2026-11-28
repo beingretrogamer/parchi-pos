@@ -390,6 +390,23 @@ the phone and the server must pass the same merge, totals and invoice cases.
 The store tests run on real SQLite through Robolectric, a test-only dependency
 that never reaches the APK.
 
+The look is Parchi Cloud's: the same paper, ink and blue colours
+(`res/values/colors.xml` mirrors `parchi-cloud/web/src/styles/tokens.css`; keep
+them in step) and the same faces, bundled as font files in `res/font`:
+Instrument Sans for text, Fraunces for titles and big totals, IBM Plex Mono for
+labels. They are static, Latin-only cuts of the open-source fonts (SIL Open Font
+Licence, copies in `assets/licenses`), about 150 KB in the APK. Android 7 has no
+font resources and shows its system font instead.
+
+`ScreenshotsTest` renders every screen to PNG at phone, opened-Fold and tablet
+sizes, light and dark, for reviewing a UI change. It is skipped unless
+`PARCHI_SHOTS` names an output folder; `PARCHI_SHOP` can name a records dump
+(category, menuItem, outlet, customer, rules, table) to use a real menu:
+
+```bash
+PARCHI_SHOTS=/tmp/shots gradle testDebugUnitTest --tests '*ScreenshotsTest'
+```
+
 Two tests run the app's real sync code and screens against a real Parchi
 Cloud server, and are skipped unless one is given (CI skips them):
 

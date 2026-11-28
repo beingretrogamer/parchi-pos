@@ -198,9 +198,9 @@ class MainActivity : ParchiActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) = renderGrid()
         })
-        titleView.typeface = Typeface.create("cursive", Typeface.BOLD)
-        titleView.textSize = 26f
-        titleView.setTextColor(getColor(R.color.accent))
+        titleView.typeface = Fonts.display(this)
+        titleView.textSize = 24f
+        titleView.setTextColor(getColor(R.color.ink))
         btnCharge.setOnClickListener { charge(printSlips = true) }
         findViewById<Button>(R.id.btnSave).setOnClickListener { charge(printSlips = false) }
         renderPayment()
@@ -311,12 +311,12 @@ class MainActivity : ParchiActivity() {
         if (name == null) {
             managerChip.text = getString(R.string.manager_chip_locked)
             managerChip.setTextColor(getColor(R.color.ink_soft))
-            managerChip.setTypeface(null, Typeface.NORMAL)
+            managerChip.typeface = Fonts.sans(this)
         } else {
             val left = (Manager.remainingMs() + 999) / 1000
             managerChip.text = getString(R.string.manager_chip_open, "${name.substringBefore(' ')} ${left / 60}:${(left % 60).toString().padStart(2, '0')}")
             managerChip.setTextColor(getColor(R.color.accent))
-            managerChip.setTypeface(null, Typeface.BOLD)
+            managerChip.typeface = Fonts.sans(this, bold = true)
         }
     }
 

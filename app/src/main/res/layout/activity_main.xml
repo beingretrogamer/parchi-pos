@@ -229,7 +229,7 @@
                     android:paddingEnd="20dp"
                     android:text="@string/btn_add_items"
                     android:textAllCaps="false"
-                    android:textColor="#FFFFFF"
+                    android:textColor="@color/on_accent"
                     android:textSize="15sp" />
             </LinearLayout>
         </LinearLayout>
@@ -384,7 +384,7 @@
                 android:layout_weight="1"
                 android:background="@drawable/btn_primary"
                 android:textAllCaps="false"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/on_accent"
                 android:textSize="17sp"
                 android:textStyle="bold" />
         </LinearLayout>

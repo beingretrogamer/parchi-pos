@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
-        <item name="android:windowBackground">@color/bg</item>
-    </style>
+    <!-- Only the base differs at night; AppTheme (values/styles.xml) builds on it. -->
+    <style name="Parchi.Base" parent="@android:style/Theme.DeviceDefault.NoActionBar" />
+    <style name="Parchi.DialogBase" parent="@android:style/Theme.DeviceDefault.Dialog.Alert" />
 </resources>
