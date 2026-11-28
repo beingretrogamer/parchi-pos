@@ -37,6 +37,7 @@ class LedgerActivity : ParchiActivity() {
 
     /** Null on the list of accounts. */
     private var customer: String? = null
+    private var accountKey: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,6 +49,7 @@ class LedgerActivity : ParchiActivity() {
         empty = findViewById(R.id.ledgerEmpty)
         list = findViewById(R.id.ledgerList)
         customer = intent.getStringExtra(EXTRA_CUSTOMER)
+        accountKey = intent.getStringExtra(EXTRA_KEY)
         findViewById<View>(R.id.ledgerActions).visibility = if (customer == null) View.GONE else View.VISIBLE
         findViewById<Button>(R.id.btnReceive).setOnClickListener { receive() }
         findViewById<Button>(R.id.btnShareStatement).setOnClickListener { shareStatement() }
@@ -82,7 +84,7 @@ class LedgerActivity : ParchiActivity() {
                 if (a.balance < -0.005) getString(R.string.advance, MainActivity.rs(-a.balance)) else "",
             ).filter { it.isNotBlank() }.joinToString("  ·  ")
             list.addView(row(a.name, detail, if (settled) getString(R.string.settled) else MainActivity.rs(a.balance), faint = settled) {
-                startActivity(Intent(this, LedgerActivity::class.java).putExtra(EXTRA_CUSTOMER, a.name))
+                startActivity(Intent(this, LedgerActivity::class.java).putExtra(EXTRA_CUSTOMER, a.name).putExtra(EXTRA_KEY, a.key))
             })
         }
     }
@@ -90,7 +92,7 @@ class LedgerActivity : ParchiActivity() {
     private fun loadStatement(name: String) {
         title.text = name
         section.setText(R.string.section_statement)
-        val entries = Ledger.statement(this, name)
+        val entries = accountKey?.let { Ledger.statementFor(this, it) } ?: Ledger.statement(this, name)
         val bal = entries.lastOrNull()?.balance ?: 0.0
         total.text = if (bal < -0.005) getString(R.string.advance, MainActivity.rs(-bal)) else MainActivity.rs(maxOf(0.0, bal))
         val billed = entries.sumOf { it.debit }
@@ -156,7 +158,7 @@ class LedgerActivity : ParchiActivity() {
     /** Settle all or part of the balance. The amount starts at the whole balance. */
     private fun receive() {
         val name = customer ?: return
-        val owed = Ledger.balance(this, name)
+        val owed = accountKey?.let { Ledger.balanceFor(this, it) } ?: Ledger.balance(this, name)
         val form = layoutInflater.inflate(R.layout.dialog_receipt, null)
         val amount = form.findViewById<EditText>(R.id.rcptAmount)
         val discount = form.findViewById<EditText>(R.id.rcptDiscount)
@@ -186,7 +188,8 @@ class LedgerActivity : ParchiActivity() {
                         time = at,
                         updatedAt = at,
                         deviceId = Cloud.me(this)?.deviceId,
-                        customerId = Customers.ensure(this, name),
+                        // On the account's customer: a merged duplicate's payments go on the one it was merged into.
+                        customerId = accountKey?.takeIf { it.startsWith("c:") }?.removePrefix("c:") ?: Customers.ensure(this, name),
                         customer = name,
                         amount = a,
                         discount = d,
@@ -201,7 +204,7 @@ class LedgerActivity : ParchiActivity() {
                     }
                     dialog.dismiss()
                     load()
-                    val left = Ledger.balance(this, name)
+                    val left = accountKey?.let { Ledger.balanceFor(this, it) } ?: Ledger.balance(this, name)
                     AlertDialog.Builder(this)
                         .setMessage(getString(R.string.received_ok, MainActivity.rs(a), name,
                             if (left > 0.005) MainActivity.rs(left) else getString(R.string.settled)))
@@ -276,5 +279,7 @@ class LedgerActivity : ParchiActivity() {
 
     companion object {
         const val EXTRA_CUSTOMER = "customer"
+        /** The account's key (see [Account.key]), so a customer's statement follows merges. */
+        const val EXTRA_KEY = "accountKey"
     }
 }
