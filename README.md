@@ -167,13 +167,30 @@ What happens on connect:
 
 From then on:
 
-- **Sync timing.** It syncs every 10 seconds while the app is open and right
-  after every change. If bills are still waiting when the app closes, they go
-  as soon as there is network.
+- **Sync is instant.** While Parchi is open, the device keeps a live
+  connection to the account (from 0.9.0).
+  - **What travels at once:** a bill, a void, a payment, a table round, a menu
+    change, from any device or the portal, shows everywhere in under a second.
+  - **Without the connection** (a poor network, or a minute after Parchi
+    closes), it syncs every 10 seconds and right after every change, as before.
+  - **Bills still waiting when the app closes** go as soon as there is network.
+- **Refused by the account.** A bill the account refused is listed under
+  *Not accepted by Parchi Cloud* on the Parchi Cloud screen.
+  - **When it goes again:** once each time the app starts, and when you press
+    **Send again**. The account's rules may have changed in between.
 - **Status dot.** The dot in the till's header is green when everything is
   up. It turns amber with a count when bills are waiting, and red when sync
   has stopped. Tap it for details.
 - **Other devices' bills** appear in Sales, with the device's name.
+  - **IceCreamOS copies:** copies of other phones' bills from the old
+    IceCreamOS feed show only once that phone has uploaded them to the account.
+    That way every device shows the same sales. The copies stay on the device,
+    and show again if it leaves the account.
+- **Dues** count each credit bill and payment on its customer.
+  - **Merges:** if the owner merges two customers in the portal (the same
+    person typed twice), every device's Dues shows them as one, under the real
+    customer's name.
+  - **Payments:** a payment on that account goes on the real customer.
 - **Edits on two devices both survive.** A void on one device and a payment
   change on another are separate edits. If two devices edit the same thing,
   the later edit wins.
@@ -198,7 +215,8 @@ From then on:
 - **Till rules.** The owner decides in the portal what needs a PIN at the
   counter: custom items, price changes, discounts over a limit, bills on
   another day, voids, payment changes, voiding a dues payment, marking items
-  sold out, and seeing the day's totals. When one needs a PIN, the device asks
+  sold out, seeing the day's totals, and for tables, taking back an item
+  sent to the kitchen and reopening a printed bill. When one needs a PIN, the device asks
   at that moment. The approval is kept on the bill and shown in the portal.
 - **Wrong PINs.** After 5 wrong PINs in a row, the pad locks for a minute.
 - **Sold out.** Long-press an item on the till, or use **Sold out** on the
