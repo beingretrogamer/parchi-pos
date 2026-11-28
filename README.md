@@ -235,6 +235,41 @@ Remove the device in the portal as well, to free its place on the licence.
 back the menu it had before Parchi Cloud, or the one saved when it joined an
 account, or the board menu.
 
+## Tables (dine-in)
+
+**Who sees it:** a connected device whose outlet has tables, set up in the portal under Tables. It gets a **Tables** button on the till. Every other device is unchanged.
+
+**Seating and ordering**
+- **Tables** shows every table by area, live:
+  - free;
+  - running: what has gone to the kitchen, and for how long;
+  - a bill waiting for its payment.
+- **Seating:** tap a free table, optionally count the guests, and the till opens for that table.
+- **Sending a round:** add dishes, then **Send to kitchen**. The kitchen printer prints the round with the table's name, and the device goes back to the tables.
+  - Any device can add a round to any table.
+  - A round never changes once sent.
+- **Taking an item back:** tap it in the order. The kitchen gets a CANCEL slip with the reason. The till rule *Take back an item sent to the kitchen* decides whether that needs a manager PIN.
+
+**The order screen** (tap a busy table) shows every round and what the bill comes to so far. From there:
+- **Print bill:**
+  1. The device syncs first, so other devices' rounds are on it.
+  2. A preview shows the discount and the outlet's service charge. The guest may refuse the charge; tap *Take service charge off*.
+  3. The bill prints with its invoice number, marked "To pay".
+- **Settle** when the guest pays: Cash, UPI, or onto a customer's dues. Until then Sales and the day close show the bill as *Not settled*.
+- **Reopen** a printed bill (till rule *Reopen a printed table bill*): it is voided, keeping its number, and the next bill gets a new one.
+- **More:**
+  - move the order to a free table;
+  - combine it with another table (one bill for both);
+  - change the number of guests;
+  - reprint a kitchen slip;
+  - cancel the order.
+
+**Two devices on one table:**
+- **Rounds from both at once:** both stand.
+- **A round that arrives after the bill was printed:** the order says so. *Bill the rest* prints a second bill for just those dishes.
+
+**Before an outlet starts using tables,** every one of its devices must be on 0.8.0 or later. In the portal, under App versions, set the minimum to 0.8.0. An older version can't read a bill that hasn't been paid yet.
+
 ## Cloud sync (IceCreamOS)
 
 *For devices not connected to Parchi Cloud. Connecting a device to Parchi

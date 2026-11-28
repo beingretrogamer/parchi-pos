@@ -110,6 +110,8 @@ class SalesActivity : ParchiActivity() {
         val others = live.filterNot { it.mine }
         daySplit.text = getString(R.string.day_split, live.size, MainActivity.rs(cash), MainActivity.rs(upi)) +
             (if (credit > 0) "\n" + getString(R.string.day_credit, MainActivity.rs(credit)) else "") +
+            live.filter { it.unsettled }.let { u -> if (u.isNotEmpty()) "\n" + getString(R.string.day_unsettled, MainActivity.rs(u.sumOf { it.total }), u.size) else "" } +
+            live.sumOf { it.serviceCharge }.let { sc -> if (sc > 0) "\n" + getString(R.string.day_service_charge, MainActivity.rs(sc)) else "" } +
             (if (discount > 0) "\n" + getString(R.string.day_discount, MainActivity.rs(discount)) else "") +
             (if (collected.isNotEmpty()) "\n" + getString(R.string.day_collected,
                 MainActivity.rs(collected.filter { it.mode == "CASH" }.sumOf { it.amount }),
@@ -138,7 +140,7 @@ class SalesActivity : ParchiActivity() {
         val time = SimpleDateFormat("HH:mm", Locale.US).format(Date(s.time))
         row.addView(text("#${s.label}", 16f, bold = true), LinearLayout.LayoutParams(dp(60), LinearLayout.LayoutParams.WRAP_CONTENT))
         val desc = listOf(time, getString(R.string.n_items, s.itemCount),
-            if (s.onCredit) getString(R.string.pay_credit) else s.payment, s.phone, s.customer,
+            s.table ?: "", if (s.unsettled) getString(R.string.not_settled) else if (s.onCredit) getString(R.string.pay_credit) else s.payment, s.phone, s.customer,
             if (s.discount > 0) getString(R.string.disc_short, MainActivity.rs(s.discount)) else "",
             if (s.voided) getString(R.string.voided_because, s.voidReason) else "",
             if (s.uid in unsynced) getString(R.string.not_synced) else "")
@@ -162,6 +164,20 @@ class SalesActivity : ParchiActivity() {
         val detail = s.lines.joinToString("\n") { "${it.qty} × ${it.name}   ${MainActivity.rs(it.amount)}" } +
             (if (s.discount > 0) "\n" + getString(R.string.discount_line, MainActivity.rs(s.discount), s.discountReason) else "") +
             (if (s.voided) "\n\n" + getString(R.string.voided_because, s.voidReason) else "")
+        // A table bill printed and not paid yet: settling it comes first.
+        if (s.unsettled && !s.voided) {
+            AlertDialog.Builder(this)
+                .setTitle(getString(R.string.bill_title, s.label, MainActivity.rs(s.total)) + (s.table?.let { "  ·  $it" } ?: ""))
+                .setItems(arrayOf(getString(R.string.settle_bill), getString(R.string.reprint_bill), getString(R.string.void_bill))) { _, which ->
+                    when (which) {
+                        0 -> TableUi.settle(this, s, s.table ?: s.label) { load() }
+                        1 -> reprint(s, bill = true, parchi = false)
+                        2 -> Manager.approve(this, Rules.VOID_BILL) { confirmVoid(s, it) }
+                    }
+                }
+                .show()
+            return
+        }
         val labels = arrayOf(
             getString(R.string.reprint_both),
             getString(R.string.reprint_bill),

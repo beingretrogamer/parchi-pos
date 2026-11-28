@@ -54,6 +54,18 @@
             android:exported="false"
             android:label="@string/title_menu" />
 
+        <!-- Dine-in: the tables grid and one party's order. -->
+        <activity
+            android:name=".TablesActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:exported="false"
+            android:label="@string/title_tables" />
+
+        <activity
+            android:name=".OrderActivity"
+            android:exported="false"
+            android:label="@string/title_tables" />
+
         <activity
             android:name=".SalesActivity"
             android:exported="false"

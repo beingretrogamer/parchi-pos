@@ -61,6 +61,13 @@
             android:textStyle="bold"
             android:visibility="gone" />
 
+        <!-- Shown when the outlet has tables (Parchi Cloud): the tables grid. -->
+        <Button
+            android:id="@+id/btnTables"
+            style="@style/TopButton"
+            android:text="@string/btn_tables"
+            android:visibility="gone" />
+
         <Button
             android:id="@+id/btnSales"
             style="@style/TopButton"
@@ -81,6 +88,45 @@
             style="@style/TopButton"
             android:contentDescription="@string/title_settings"
             android:text="@string/btn_settings_icon" />
+    </LinearLayout>
+
+    <!-- Table mode: which table this round is for, back to the tables, and its order so far. -->
+    <LinearLayout
+        android:id="@+id/tableBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/accent_soft"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/side_padding"
+        android:paddingEnd="@dimen/side_padding"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:tag="sidePad"
+        android:visibility="gone">
+
+        <Button
+            android:id="@+id/btnBackToTables"
+            style="@style/TopButton"
+            android:layout_marginStart="0dp"
+            android:text="@string/btn_back_tables" />
+
+        <TextView
+            android:id="@+id/tableTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:textColor="@color/ink"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnOrder"
+            style="@style/TopButton"
+            android:text="@string/btn_order" />
     </LinearLayout>
 
     <!-- Search, and the way to ring up something that is not on the menu. -->

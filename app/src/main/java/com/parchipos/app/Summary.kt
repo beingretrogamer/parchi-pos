@@ -33,6 +33,11 @@ object Summary {
             append("Total: ${rs(live.sumOf { it.total })} (${bills(live.size)})\n")
             append("Cash: ${rs(live.filter { it.payment == "CASH" }.sumOf { it.total })}\n")
             append("UPI: ${rs(live.filter { it.payment == "UPI" }.sumOf { it.total })}\n")
+            // Table bills printed and not paid yet: in the total, in no payment.
+            val unsettled = live.filter { it.unsettled }
+            if (unsettled.isNotEmpty()) append("Not settled yet: ${rs(unsettled.sumOf { it.total })} (${bills(unsettled.size)})\n")
+            val serviceCharge = live.sumOf { it.serviceCharge }
+            if (serviceCharge > 0) append("Service charge: ${rs(serviceCharge)}\n")
             val credit = live.filter { it.onCredit }.sumOf { it.total }
             if (credit > 0) append("On credit: ${rs(credit)}\n")
             val discount = live.sumOf { it.discount }
