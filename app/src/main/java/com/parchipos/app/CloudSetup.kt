@@ -130,6 +130,7 @@ object CloudSetup {
      * The portal lists this device until it is removed there.
      */
     fun disconnect(c: Context) {
+        Live.stop()
         Store.tx(c) { db ->
             db.execSQL("DELETE FROM kv WHERE (key LIKE 'cloud.%' AND key != 'cloud.server') OR key LIKE 'inv.%'")
             forgetAccount(db)

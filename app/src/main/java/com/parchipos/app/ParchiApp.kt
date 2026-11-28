@@ -23,12 +23,19 @@ class ParchiApp : Application(), Application.ActivityLifecycleCallbacks {
 
     private val ui = Handler(Looper.getMainLooper())
     private var started = 0
+    private var lastKick = 0L
     private val tick = object : Runnable {
         override fun run() {
-            SyncEngine.kick(this@ParchiApp)
+            // With the live socket open, changes arrive by themselves; a pull every few minutes keeps the cursor near.
+            val now = System.currentTimeMillis()
+            if (!Live.ready || now - lastKick >= LIVE_PULL_MS) {
+                lastKick = now
+                SyncEngine.kick(this@ParchiApp)
+            }
             ui.postDelayed(this, EVERY_MS)
         }
     }
+    private val closeLive = Runnable { Live.stop() }
 
     override fun onCreate() {
         super.onCreate()
@@ -37,6 +44,8 @@ class ParchiApp : Application(), Application.ActivityLifecycleCallbacks {
 
     override fun onActivityStarted(activity: Activity) {
         if (started++ == 0) {
+            ui.removeCallbacks(closeLive)
+            if (Cloud.connected(this)) Live.start(this)
             ui.removeCallbacks(tick)
             tick.run()
         }
@@ -47,6 +56,9 @@ class ParchiApp : Application(), Application.ActivityLifecycleCallbacks {
         // A manager's unlock ends when Parchi leaves the screen.
         Manager.lock()
         ui.removeCallbacks(tick)
+        // The socket stays a little while, so switching apps for a moment doesn't drop it.
+        ui.removeCallbacks(closeLive)
+        ui.postDelayed(closeLive, CLOSE_LIVE_MS)
         SyncEngine.kick(this)
         if (Cloud.connected(this) && Store.outboxCount(this) > 0) SyncJob.schedule(this)
     }
@@ -59,6 +71,8 @@ class ParchiApp : Application(), Application.ActivityLifecycleCallbacks {
 
     companion object {
         const val EVERY_MS = 10_000L
+        private const val LIVE_PULL_MS = 5 * 60_000L
+        private const val CLOSE_LIVE_MS = 30_000L
     }
 }
 

@@ -188,6 +188,7 @@ class CloudActivity : ParchiActivity() {
                     toast(getString(R.string.connected_toast, me.accountName, me.letter))
                     render()
                     SyncEngine.kick(this)
+                    Live.start(this)
                 }.onFailure { e ->
                     AlertDialog.Builder(this).setMessage(e.message ?: e.javaClass.simpleName).setPositiveButton(android.R.string.ok, null).show()
                 }
