@@ -64,6 +64,28 @@ object Printer {
         }
     }
 
+    /**
+     * A table's round to the kitchen printer (the bill printer when there is no separate one).
+     * [done] runs on the main thread with an error, or null once it printed.
+     */
+    fun round(c: Context, table: String, round: Tables.Round, no: Int, covers: Int?, done: (String?) -> Unit) {
+        val app = c.applicationContext
+        val shop = Prefs.shop(app)
+        val job = PrintPlan.of(Prefs.billPrinter(app), shop.width, Prefs.kitchenPrinter(app), false, true).firstOrNull()
+        if (job == null) {
+            ui.post { done(null) }
+            return
+        }
+        thread {
+            val err = try {
+                run(app, job.target, "table $table round $no", Escpos.round(shop.copy(width = job.width), table, round, no, covers))
+            } catch (e: Exception) {
+                e.message ?: e.javaClass.simpleName
+            }
+            ui.post { done(err) }
+        }
+    }
+
     private fun run(app: Context, target: PrinterTarget, what: String, bytes: ByteArray): String? = try {
         if (!target.ready) throw IllegalStateException(if (target.bluetooth) "no Bluetooth printer chosen in Settings" else "no printer address in Settings")
         PrinterQueue.send(app, target, bytes, onLog = { PrintLog.append(it) })

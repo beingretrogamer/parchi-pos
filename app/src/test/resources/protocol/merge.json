@@ -1,73 +1,621 @@
 {
-  "version": 1,
+  "version": 2,
   "about": "merge(kind, a, b) must equal `expected`, and merge(kind, b, a) must too. Only updatedAt, fieldTimes and data are compared.",
   "cases": [
     {
       "name": "void on one phone, payment change on another: both survive",
       "kind": "bill",
-      "a": { "updatedAt": 2000, "byDevice": "dev_A", "fieldTimes": { "void": 2000, "payment": 1000, "date": 1000, "content": 1000 },
-             "data": { "billNo": "261127-A012", "token": 12, "letter": "A", "day": "20261127", "time": 1000, "payment": "CASH", "lines": [{ "name": "Veg Momos (Half)", "price": 4000, "qty": 1 }], "voided": true, "voidReason": "customer left" } },
-      "b": { "updatedAt": 3000, "byDevice": "dev_B", "fieldTimes": { "void": 1000, "payment": 3000, "date": 1000, "content": 1000 },
-             "data": { "billNo": "261127-A012", "token": 12, "letter": "A", "day": "20261127", "time": 1000, "payment": "UPI", "lines": [{ "name": "Veg Momos (Half)", "price": 4000, "qty": 1 }], "voided": false } },
-      "expected": { "updatedAt": 3000, "fieldTimes": { "void": 2000, "payment": 3000, "date": 1000, "content": 1000 },
-             "data": { "billNo": "261127-A012", "token": 12, "letter": "A", "day": "20261127", "time": 1000, "payment": "UPI", "lines": [{ "name": "Veg Momos (Half)", "price": 4000, "qty": 1 }], "voided": true, "voidReason": "customer left" } }
+      "a": {
+        "updatedAt": 2000,
+        "byDevice": "dev_A",
+        "fieldTimes": {
+          "void": 2000,
+          "payment": 1000,
+          "date": 1000,
+          "content": 1000
+        },
+        "data": {
+          "billNo": "261127-A012",
+          "token": 12,
+          "letter": "A",
+          "day": "20261127",
+          "time": 1000,
+          "payment": "CASH",
+          "lines": [
+            {
+              "name": "Veg Momos (Half)",
+              "price": 4000,
+              "qty": 1
+            }
+          ],
+          "voided": true,
+          "voidReason": "customer left"
+        }
+      },
+      "b": {
+        "updatedAt": 3000,
+        "byDevice": "dev_B",
+        "fieldTimes": {
+          "void": 1000,
+          "payment": 3000,
+          "date": 1000,
+          "content": 1000
+        },
+        "data": {
+          "billNo": "261127-A012",
+          "token": 12,
+          "letter": "A",
+          "day": "20261127",
+          "time": 1000,
+          "payment": "UPI",
+          "lines": [
+            {
+              "name": "Veg Momos (Half)",
+              "price": 4000,
+              "qty": 1
+            }
+          ],
+          "voided": false
+        }
+      },
+      "expected": {
+        "updatedAt": 3000,
+        "fieldTimes": {
+          "void": 2000,
+          "payment": 3000,
+          "date": 1000,
+          "content": 1000
+        },
+        "data": {
+          "billNo": "261127-A012",
+          "token": 12,
+          "letter": "A",
+          "day": "20261127",
+          "time": 1000,
+          "payment": "UPI",
+          "lines": [
+            {
+              "name": "Veg Momos (Half)",
+              "price": 4000,
+              "qty": 1
+            }
+          ],
+          "voided": true,
+          "voidReason": "customer left"
+        }
+      }
     },
     {
       "name": "same group edited on two phones: the later edit wins",
       "kind": "bill",
-      "a": { "updatedAt": 2000, "byDevice": "dev_A", "fieldTimes": { "void": 1000, "payment": 2000, "date": 1000, "content": 1000 },
-             "data": { "billNo": "B1", "token": 1, "letter": "A", "day": "20261127", "time": 1000, "payment": "UPI", "lines": [{ "name": "Tea", "price": 1000, "qty": 1 }], "voided": false } },
-      "b": { "updatedAt": 2500, "byDevice": "dev_B", "fieldTimes": { "void": 1000, "payment": 2500, "date": 1000, "content": 1000 },
-             "data": { "billNo": "B1", "token": 1, "letter": "A", "day": "20261127", "time": 1000, "payment": "CREDIT", "customerId": "cust_x", "customer": "Ramesh", "lines": [{ "name": "Tea", "price": 1000, "qty": 1 }], "voided": false } },
-      "expected": { "updatedAt": 2500, "fieldTimes": { "void": 1000, "payment": 2500, "date": 1000, "content": 1000 },
-             "data": { "billNo": "B1", "token": 1, "letter": "A", "day": "20261127", "time": 1000, "payment": "CREDIT", "customerId": "cust_x", "customer": "Ramesh", "lines": [{ "name": "Tea", "price": 1000, "qty": 1 }], "voided": false } }
+      "a": {
+        "updatedAt": 2000,
+        "byDevice": "dev_A",
+        "fieldTimes": {
+          "void": 1000,
+          "payment": 2000,
+          "date": 1000,
+          "content": 1000
+        },
+        "data": {
+          "billNo": "B1",
+          "token": 1,
+          "letter": "A",
+          "day": "20261127",
+          "time": 1000,
+          "payment": "UPI",
+          "lines": [
+            {
+              "name": "Tea",
+              "price": 1000,
+              "qty": 1
+            }
+          ],
+          "voided": false
+        }
+      },
+      "b": {
+        "updatedAt": 2500,
+        "byDevice": "dev_B",
+        "fieldTimes": {
+          "void": 1000,
+          "payment": 2500,
+          "date": 1000,
+          "content": 1000
+        },
+        "data": {
+          "billNo": "B1",
+          "token": 1,
+          "letter": "A",
+          "day": "20261127",
+          "time": 1000,
+          "payment": "CREDIT",
+          "customerId": "cust_x",
+          "customer": "Ramesh",
+          "lines": [
+            {
+              "name": "Tea",
+              "price": 1000,
+              "qty": 1
+            }
+          ],
+          "voided": false
+        }
+      },
+      "expected": {
+        "updatedAt": 2500,
+        "fieldTimes": {
+          "void": 1000,
+          "payment": 2500,
+          "date": 1000,
+          "content": 1000
+        },
+        "data": {
+          "billNo": "B1",
+          "token": 1,
+          "letter": "A",
+          "day": "20261127",
+          "time": 1000,
+          "payment": "CREDIT",
+          "customerId": "cust_x",
+          "customer": "Ramesh",
+          "lines": [
+            {
+              "name": "Tea",
+              "price": 1000,
+              "qty": 1
+            }
+          ],
+          "voided": false
+        }
+      }
     },
     {
       "name": "a field missing from the winning group is removed",
       "kind": "bill",
-      "a": { "updatedAt": 1000, "byDevice": "dev_A", "fieldTimes": { "void": 1000, "payment": 1000, "date": 1000, "content": 1000 },
-             "data": { "billNo": "B2", "token": 2, "letter": "A", "day": "20261127", "time": 1000, "payment": "CREDIT", "customerId": "cust_x", "customer": "Ramesh", "lines": [{ "name": "Tea", "price": 1000, "qty": 1 }] } },
-      "b": { "updatedAt": 2000, "byDevice": "dev_A", "fieldTimes": { "void": 1000, "payment": 2000, "date": 1000, "content": 1000 },
-             "data": { "billNo": "B2", "token": 2, "letter": "A", "day": "20261127", "time": 1000, "payment": "CASH", "lines": [{ "name": "Tea", "price": 1000, "qty": 1 }] } },
-      "expected": { "updatedAt": 2000, "fieldTimes": { "void": 1000, "payment": 2000, "date": 1000, "content": 1000 },
-             "data": { "billNo": "B2", "token": 2, "letter": "A", "day": "20261127", "time": 1000, "payment": "CASH", "lines": [{ "name": "Tea", "price": 1000, "qty": 1 }] } }
+      "a": {
+        "updatedAt": 1000,
+        "byDevice": "dev_A",
+        "fieldTimes": {
+          "void": 1000,
+          "payment": 1000,
+          "date": 1000,
+          "content": 1000
+        },
+        "data": {
+          "billNo": "B2",
+          "token": 2,
+          "letter": "A",
+          "day": "20261127",
+          "time": 1000,
+          "payment": "CREDIT",
+          "customerId": "cust_x",
+          "customer": "Ramesh",
+          "lines": [
+            {
+              "name": "Tea",
+              "price": 1000,
+              "qty": 1
+            }
+          ]
+        }
+      },
+      "b": {
+        "updatedAt": 2000,
+        "byDevice": "dev_A",
+        "fieldTimes": {
+          "void": 1000,
+          "payment": 2000,
+          "date": 1000,
+          "content": 1000
+        },
+        "data": {
+          "billNo": "B2",
+          "token": 2,
+          "letter": "A",
+          "day": "20261127",
+          "time": 1000,
+          "payment": "CASH",
+          "lines": [
+            {
+              "name": "Tea",
+              "price": 1000,
+              "qty": 1
+            }
+          ]
+        }
+      },
+      "expected": {
+        "updatedAt": 2000,
+        "fieldTimes": {
+          "void": 1000,
+          "payment": 2000,
+          "date": 1000,
+          "content": 1000
+        },
+        "data": {
+          "billNo": "B2",
+          "token": 2,
+          "letter": "A",
+          "day": "20261127",
+          "time": 1000,
+          "payment": "CASH",
+          "lines": [
+            {
+              "name": "Tea",
+              "price": 1000,
+              "qty": 1
+            }
+          ]
+        }
+      }
     },
     {
       "name": "same time on two phones: the higher device id wins, everywhere",
       "kind": "bill",
-      "a": { "updatedAt": 5000, "byDevice": "dev_A", "fieldTimes": { "void": 1000, "payment": 5000, "date": 1000, "content": 1000 },
-             "data": { "billNo": "B3", "token": 3, "letter": "A", "day": "20261127", "time": 1000, "payment": "UPI", "lines": [{ "name": "Tea", "price": 1000, "qty": 1 }] } },
-      "b": { "updatedAt": 5000, "byDevice": "dev_B", "fieldTimes": { "void": 1000, "payment": 5000, "date": 1000, "content": 1000 },
-             "data": { "billNo": "B3", "token": 3, "letter": "A", "day": "20261127", "time": 1000, "payment": "CASH", "lines": [{ "name": "Tea", "price": 1000, "qty": 1 }] } },
-      "expected": { "updatedAt": 5000, "fieldTimes": { "void": 1000, "payment": 5000, "date": 1000, "content": 1000 },
-             "data": { "billNo": "B3", "token": 3, "letter": "A", "day": "20261127", "time": 1000, "payment": "CASH", "lines": [{ "name": "Tea", "price": 1000, "qty": 1 }] } }
+      "a": {
+        "updatedAt": 5000,
+        "byDevice": "dev_A",
+        "fieldTimes": {
+          "void": 1000,
+          "payment": 5000,
+          "date": 1000,
+          "content": 1000
+        },
+        "data": {
+          "billNo": "B3",
+          "token": 3,
+          "letter": "A",
+          "day": "20261127",
+          "time": 1000,
+          "payment": "UPI",
+          "lines": [
+            {
+              "name": "Tea",
+              "price": 1000,
+              "qty": 1
+            }
+          ]
+        }
+      },
+      "b": {
+        "updatedAt": 5000,
+        "byDevice": "dev_B",
+        "fieldTimes": {
+          "void": 1000,
+          "payment": 5000,
+          "date": 1000,
+          "content": 1000
+        },
+        "data": {
+          "billNo": "B3",
+          "token": 3,
+          "letter": "A",
+          "day": "20261127",
+          "time": 1000,
+          "payment": "CASH",
+          "lines": [
+            {
+              "name": "Tea",
+              "price": 1000,
+              "qty": 1
+            }
+          ]
+        }
+      },
+      "expected": {
+        "updatedAt": 5000,
+        "fieldTimes": {
+          "void": 1000,
+          "payment": 5000,
+          "date": 1000,
+          "content": 1000
+        },
+        "data": {
+          "billNo": "B3",
+          "token": 3,
+          "letter": "A",
+          "day": "20261127",
+          "time": 1000,
+          "payment": "CASH",
+          "lines": [
+            {
+              "name": "Tea",
+              "price": 1000,
+              "qty": 1
+            }
+          ]
+        }
+      }
     },
     {
       "name": "date change and void on different phones both survive",
       "kind": "bill",
-      "a": { "updatedAt": 4000, "byDevice": "dev_B", "fieldTimes": { "void": 1000, "payment": 1000, "date": 4000, "content": 1000 },
-             "data": { "billNo": "261126-A004", "token": 4, "letter": "A", "day": "20261126", "time": 900, "payment": "CASH", "lines": [{ "name": "Tea", "price": 1000, "qty": 2 }] } },
-      "b": { "updatedAt": 3000, "byDevice": "dev_A", "fieldTimes": { "void": 3000, "payment": 1000, "date": 1000, "content": 1000 },
-             "data": { "billNo": "261127-A009", "token": 9, "letter": "A", "day": "20261127", "time": 1000, "payment": "CASH", "lines": [{ "name": "Tea", "price": 1000, "qty": 2 }], "voided": true, "voidReason": "duplicate" } },
-      "expected": { "updatedAt": 4000, "fieldTimes": { "void": 3000, "payment": 1000, "date": 4000, "content": 1000 },
-             "data": { "billNo": "261126-A004", "token": 4, "letter": "A", "day": "20261126", "time": 900, "payment": "CASH", "lines": [{ "name": "Tea", "price": 1000, "qty": 2 }], "voided": true, "voidReason": "duplicate" } }
+      "a": {
+        "updatedAt": 4000,
+        "byDevice": "dev_B",
+        "fieldTimes": {
+          "void": 1000,
+          "payment": 1000,
+          "date": 4000,
+          "content": 1000
+        },
+        "data": {
+          "billNo": "261126-A004",
+          "token": 4,
+          "letter": "A",
+          "day": "20261126",
+          "time": 900,
+          "payment": "CASH",
+          "lines": [
+            {
+              "name": "Tea",
+              "price": 1000,
+              "qty": 2
+            }
+          ]
+        }
+      },
+      "b": {
+        "updatedAt": 3000,
+        "byDevice": "dev_A",
+        "fieldTimes": {
+          "void": 3000,
+          "payment": 1000,
+          "date": 1000,
+          "content": 1000
+        },
+        "data": {
+          "billNo": "261127-A009",
+          "token": 9,
+          "letter": "A",
+          "day": "20261127",
+          "time": 1000,
+          "payment": "CASH",
+          "lines": [
+            {
+              "name": "Tea",
+              "price": 1000,
+              "qty": 2
+            }
+          ],
+          "voided": true,
+          "voidReason": "duplicate"
+        }
+      },
+      "expected": {
+        "updatedAt": 4000,
+        "fieldTimes": {
+          "void": 3000,
+          "payment": 1000,
+          "date": 4000,
+          "content": 1000
+        },
+        "data": {
+          "billNo": "261126-A004",
+          "token": 4,
+          "letter": "A",
+          "day": "20261126",
+          "time": 900,
+          "payment": "CASH",
+          "lines": [
+            {
+              "name": "Tea",
+              "price": 1000,
+              "qty": 2
+            }
+          ],
+          "voided": true,
+          "voidReason": "duplicate"
+        }
+      }
     },
     {
       "name": "receipt void and note edit both survive",
       "kind": "receipt",
-      "a": { "updatedAt": 2000, "byDevice": "dev_A", "fieldTimes": { "void": 2000, "content": 1000 },
-             "data": { "time": 1000, "day": "20261127", "customerId": "cust_x", "amount": 50000, "mode": "CASH", "voided": true, "voidReason": "wrong customer" } },
-      "b": { "updatedAt": 1500, "byDevice": "dev_B", "fieldTimes": { "void": 1000, "content": 1500 },
-             "data": { "time": 1000, "day": "20261127", "customerId": "cust_x", "amount": 50000, "mode": "UPI", "note": "paid by son" } },
-      "expected": { "updatedAt": 2000, "fieldTimes": { "void": 2000, "content": 1500 },
-             "data": { "time": 1000, "day": "20261127", "customerId": "cust_x", "amount": 50000, "mode": "UPI", "note": "paid by son", "voided": true, "voidReason": "wrong customer" } }
+      "a": {
+        "updatedAt": 2000,
+        "byDevice": "dev_A",
+        "fieldTimes": {
+          "void": 2000,
+          "content": 1000
+        },
+        "data": {
+          "time": 1000,
+          "day": "20261127",
+          "customerId": "cust_x",
+          "amount": 50000,
+          "mode": "CASH",
+          "voided": true,
+          "voidReason": "wrong customer"
+        }
+      },
+      "b": {
+        "updatedAt": 1500,
+        "byDevice": "dev_B",
+        "fieldTimes": {
+          "void": 1000,
+          "content": 1500
+        },
+        "data": {
+          "time": 1000,
+          "day": "20261127",
+          "customerId": "cust_x",
+          "amount": 50000,
+          "mode": "UPI",
+          "note": "paid by son"
+        }
+      },
+      "expected": {
+        "updatedAt": 2000,
+        "fieldTimes": {
+          "void": 2000,
+          "content": 1500
+        },
+        "data": {
+          "time": 1000,
+          "day": "20261127",
+          "customerId": "cust_x",
+          "amount": 50000,
+          "mode": "UPI",
+          "note": "paid by son",
+          "voided": true,
+          "voidReason": "wrong customer"
+        }
+      }
     },
     {
       "name": "menu items are whole-record: the newer edit wins entirely",
       "kind": "menuItem",
-      "a": { "updatedAt": 2000, "byDevice": "portal", "data": { "categoryId": "cat_1", "name": "Veg Momos", "price": 4500, "sort": 1, "variants": [] } },
-      "b": { "updatedAt": 1000, "byDevice": "dev_A", "data": { "categoryId": "cat_1", "name": "Veg Steam Momos", "price": 4000, "sort": 1, "variants": [] } },
-      "expected": { "updatedAt": 2000, "fieldTimes": null, "data": { "categoryId": "cat_1", "name": "Veg Momos", "price": 4500, "sort": 1, "variants": [] } }
+      "a": {
+        "updatedAt": 2000,
+        "byDevice": "portal",
+        "data": {
+          "categoryId": "cat_1",
+          "name": "Veg Momos",
+          "price": 4500,
+          "sort": 1,
+          "variants": []
+        }
+      },
+      "b": {
+        "updatedAt": 1000,
+        "byDevice": "dev_A",
+        "data": {
+          "categoryId": "cat_1",
+          "name": "Veg Steam Momos",
+          "price": 4000,
+          "sort": 1,
+          "variants": []
+        }
+      },
+      "expected": {
+        "updatedAt": 2000,
+        "fieldTimes": null,
+        "data": {
+          "categoryId": "cat_1",
+          "name": "Veg Momos",
+          "price": 4500,
+          "sort": 1,
+          "variants": []
+        }
+      }
+    },
+    {
+      "name": "an order moved on one device while its guests are counted on another: both survive",
+      "kind": "order",
+      "a": {
+        "updatedAt": 3000,
+        "byDevice": "dev_A",
+        "fieldTimes": {
+          "place": 3000,
+          "status": 1000,
+          "info": 1000
+        },
+        "data": {
+          "tableId": "tbl_8",
+          "openedAt": 1000,
+          "day": "20261128",
+          "deviceId": "dev_A",
+          "status": "open",
+          "billIds": []
+        }
+      },
+      "b": {
+        "updatedAt": 2000,
+        "byDevice": "dev_B",
+        "fieldTimes": {
+          "place": 1000,
+          "status": 1000,
+          "info": 2000
+        },
+        "data": {
+          "tableId": "tbl_5",
+          "openedAt": 1000,
+          "day": "20261128",
+          "deviceId": "dev_A",
+          "status": "open",
+          "billIds": [],
+          "covers": 4
+        }
+      },
+      "expected": {
+        "updatedAt": 3000,
+        "fieldTimes": {
+          "place": 3000,
+          "status": 1000,
+          "info": 2000
+        },
+        "data": {
+          "tableId": "tbl_8",
+          "openedAt": 1000,
+          "day": "20261128",
+          "deviceId": "dev_A",
+          "status": "open",
+          "billIds": [],
+          "covers": 4
+        }
+      }
+    },
+    {
+      "name": "an order billed on one device while another merges it into a table: both survive",
+      "kind": "order",
+      "a": {
+        "updatedAt": 2000,
+        "byDevice": "dev_A",
+        "fieldTimes": {
+          "place": 1000,
+          "status": 2000,
+          "info": 1000
+        },
+        "data": {
+          "tableId": "tbl_5",
+          "openedAt": 1000,
+          "day": "20261128",
+          "deviceId": "dev_A",
+          "status": "billed",
+          "billIds": [
+            "bill_1"
+          ]
+        }
+      },
+      "b": {
+        "updatedAt": 2500,
+        "byDevice": "dev_B",
+        "fieldTimes": {
+          "place": 2500,
+          "status": 1000,
+          "info": 1000
+        },
+        "data": {
+          "tableId": "tbl_5",
+          "openedAt": 1000,
+          "day": "20261128",
+          "deviceId": "dev_A",
+          "status": "open",
+          "billIds": [],
+          "mergedInto": "ord_6"
+        }
+      },
+      "expected": {
+        "updatedAt": 2500,
+        "fieldTimes": {
+          "place": 2500,
+          "status": 2000,
+          "info": 1000
+        },
+        "data": {
+          "tableId": "tbl_5",
+          "openedAt": 1000,
+          "day": "20261128",
+          "deviceId": "dev_A",
+          "status": "billed",
+          "billIds": [
+            "bill_1"
+          ],
+          "mergedInto": "ord_6"
+        }
+      }
     }
   ]
 }

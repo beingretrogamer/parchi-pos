@@ -34,7 +34,7 @@ import java.util.UUID
  */
 object Store {
     private const val NAME = "parchi.db"
-    private const val VERSION = 2
+    private const val VERSION = 3
 
     @Volatile private var helper: Helper? = null
 
@@ -46,6 +46,8 @@ object Store {
         // Each version adds tables and columns, never rebuilds one.
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
             if (oldVersion < 2) Provenance.upgrade(app, db)
+            // Orders merge per field group (a move here, a bill there), so records keep their group times too.
+            if (oldVersion < 3) db.execSQL("ALTER TABLE records ADD COLUMN field_times TEXT")
         }
     }
 
@@ -73,7 +75,7 @@ object Store {
         """CREATE TABLE records (
              kind TEXT NOT NULL, id TEXT NOT NULL, outlet_id TEXT, data TEXT NOT NULL,
              deleted INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL, by_user TEXT, proof TEXT,
-             seq INTEGER NOT NULL DEFAULT 0, dirty INTEGER NOT NULL DEFAULT 0, sync_error TEXT,
+             seq INTEGER NOT NULL DEFAULT 0, dirty INTEGER NOT NULL DEFAULT 0, sync_error TEXT, field_times TEXT,
              PRIMARY KEY (kind, id))""",
         "CREATE INDEX records_dirty ON records(dirty)",
     )
@@ -217,6 +219,8 @@ object Store {
         val proof: String? = null,
         val seq: Long = 0,
         val dirty: Boolean = false,
+        /** For kinds that merge per field group (orders); null for whole-record kinds. */
+        val fieldTimes: Map<String, Long>? = null,
     )
 
     fun record(c: Context, kind: String, id: String): Rec? =
@@ -240,6 +244,7 @@ object Store {
             put("proof", r.proof)
             put("seq", r.seq)
             put("dirty", if (r.dirty) 1 else 0)
+            put("field_times", r.fieldTimes?.let { JSONObject(it as Map<*, *>).toString() })
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
@@ -254,6 +259,7 @@ object Store {
         proof = cur.getString(cur.getColumnIndexOrThrow("proof")),
         seq = cur.getLong(cur.getColumnIndexOrThrow("seq")),
         dirty = cur.getInt(cur.getColumnIndexOrThrow("dirty")) == 1,
+        fieldTimes = cur.getColumnIndex("field_times").takeIf { it >= 0 }?.let { times(cur.getString(it)) }?.takeIf { it.isNotEmpty() },
     )
 
     // ── sync bookkeeping ────────────────────────────────────────────────
@@ -283,7 +289,7 @@ object Store {
     }
 
     fun raw(c: Context, kind: String, id: String): Raw? = when (val t = tableOf(kind)) {
-        "records" -> record(c, kind, id)?.let { Raw(t, kind, id, it.data, it.updatedAt, null, it.deleted, it.dirty, it.seq, it.byUser, it.proof, it.outletId) }
+        "records" -> record(c, kind, id)?.let { Raw(t, kind, id, it.data, it.updatedAt, it.fieldTimes, it.deleted, it.dirty, it.seq, it.byUser, it.proof, it.outletId) }
         else -> db(c).rawQuery("SELECT data, updated_at, field_times, dirty, seq, src FROM $t WHERE id = ?", arrayOf(id)).use {
             if (!it.moveToFirst()) null
             else Raw(t, kind, id, JSONObject(it.getString(0)), it.getLong(1), times(it.getString(2)), false, it.getInt(3) == 1, it.getLong(4), src = it.getString(5))
@@ -298,10 +304,11 @@ object Store {
     fun outbox(c: Context, limit: Int): List<Raw> {
         val out = ArrayList<Raw>()
         db(c).rawQuery(
-            """SELECT * FROM records WHERE dirty = 1 AND kind IN ('customer','category','menuItem','itemStatus','outlet','rules')
-               ORDER BY CASE kind WHEN 'customer' THEN 0 WHEN 'category' THEN 1 ELSE 2 END, updated_at LIMIT ?""",
+            // An order goes before its rounds, though the server takes them either way round.
+            """SELECT * FROM records WHERE dirty = 1 AND kind IN ('customer','category','menuItem','itemStatus','outlet','rules','order','round')
+               ORDER BY CASE kind WHEN 'customer' THEN 0 WHEN 'category' THEN 1 WHEN 'order' THEN 3 WHEN 'round' THEN 4 ELSE 2 END, updated_at LIMIT ?""",
             arrayOf(limit.toString()),
-        ).use { cur -> while (cur.moveToNext()) rec(cur).let { out.add(Raw("records", it.kind, it.id, it.data, it.updatedAt, null, it.deleted, true, it.seq, it.byUser, it.proof, it.outletId)) } }
+        ).use { cur -> while (cur.moveToNext()) rec(cur).let { out.add(Raw("records", it.kind, it.id, it.data, it.updatedAt, it.fieldTimes, it.deleted, true, it.seq, it.byUser, it.proof, it.outletId)) } }
         for ((t, kind) in listOf("receipts" to "receipt", "bills" to "bill")) {
             if (out.size >= limit) break
             db(c).rawQuery("SELECT id, data, updated_at, field_times, seq FROM $t WHERE dirty = 1 ORDER BY updated_at LIMIT ?", arrayOf((limit - out.size).toString())).use { cur ->
@@ -469,10 +476,17 @@ internal object Bills {
         o.put("time", s.time)
         o.putOrRemove("deviceId", s.deviceId)
         o.putOrRemove("origin", s.origin.ifBlank { null })
-        o.put("payment", s.payment)
+        // A table bill printed but not paid yet has no payment until it is settled.
+        o.put("payment", if (s.payment.isEmpty()) JSONObject.NULL else s.payment)
+        o.putOrRemove("settledAt", s.settledAt)
         o.put("customer", s.customer)
         o.putOrRemove("customerId", s.customerId)
         o.putOrRemove("invoiceNo", s.invoiceNo)
+        o.putOrRemove("orderId", s.orderId)
+        o.putOrRemove("table", s.table)
+        if (s.roundIds.isNotEmpty()) o.put("roundIds", JSONArray(s.roundIds)) else o.remove("roundIds")
+        o.putOrRemove("covers", s.covers)
+        if (s.serviceChargePct > 0) o.put("serviceChargePct", s.serviceChargePct) else o.remove("serviceChargePct")
         o.put("lines", JSONArray().apply {
             s.lines.forEach { l ->
                 put(JSONObject().apply {
@@ -498,8 +512,8 @@ internal object Bills {
 
     fun totalPaise(data: JSONObject): Long {
         val arr = data.optJSONArray("lines") ?: JSONArray()
-        val lines = (0 until arr.length()).map { arr.getJSONObject(it).let { l -> Protocol.Line(l.optLong("price"), l.optInt("qty")) } }
-        return Protocol.billTotals(lines, data.optLong("discount", 0)).total
+        val lines = (0 until arr.length()).map { arr.getJSONObject(it).let { l -> Protocol.Line(l.optLong("price"), l.optInt("qty"), l.optDouble("taxRate", 0.0).takeIf { r -> !r.isNaN() } ?: 0.0) } }
+        return Protocol.billTotals(lines, data.optLong("discount", 0), true, data.optDouble("serviceChargePct", 0.0).takeIf { !it.isNaN() } ?: 0.0).total
     }
 
     fun fromRow(cur: Cursor): Sale? = try {
@@ -534,7 +548,8 @@ internal object Bills {
             token = o.getInt("token"),
             time = o.getLong("time"),
             lines = lines,
-            payment = o.optString("payment", "CASH"),
+            // null: a table bill not settled yet. (optString would turn JSON null into "null".)
+            payment = if (o.has("payment") && o.isNull("payment")) "" else o.optString("payment", "CASH"),
             customer = o.optString("customer", ""),
             voided = o.optBoolean("voided", false),
             uid = uid,
@@ -550,6 +565,12 @@ internal object Bills {
             invoiceNo = o.optStringOrNull("invoiceNo"),
             fieldTimes = fieldTimes,
             approvals = ApprovalNote.listFrom(o.optJSONArray("approvals")),
+            orderId = o.optStringOrNull("orderId"),
+            table = o.optStringOrNull("table"),
+            roundIds = o.optJSONArray("roundIds")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList(),
+            covers = if (o.has("covers") && !o.isNull("covers")) o.getInt("covers") else null,
+            serviceChargePct = o.optDouble("serviceChargePct", 0.0).takeIf { !it.isNaN() } ?: 0.0,
+            settledAt = if (o.has("settledAt") && !o.isNull("settledAt")) o.getLong("settledAt") else null,
         )
     }
 }

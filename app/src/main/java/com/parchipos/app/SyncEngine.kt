@@ -334,6 +334,7 @@ object SyncEngine {
                 byUser = if (dirty) local?.byUser else r.optStringOrNull("byUser"),
                 proof = if (dirty) local?.proof else null,
                 seq = seq, dirty = dirty,
+                fieldTimes = state.fieldTimes?.takeIf { Protocol.FIELD_GROUPS.containsKey(kind) },
             ))
         }
     }
