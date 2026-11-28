@@ -75,7 +75,7 @@ object BtPrinter {
                 connect(device, attempt)
             } catch (e: IOException) {
                 attempt++
-                if (attempt >= CONNECT_TRIES) throw BtError("printer did not answer. Is it on, in range and not connected to another phone? (${e.message ?: "no reply"})")
+                if (attempt >= CONNECT_TRIES) throw BtError("printer did not answer. Is it on, in range and not connected to another device? (${e.message ?: "no reply"})")
                 onLog("Bluetooth printer did not answer (${e.message}); retry $attempt of ${CONNECT_TRIES - 1}")
                 try { Thread.sleep(600L * attempt) } catch (_: InterruptedException) {}
                 continue
@@ -127,7 +127,7 @@ object BtPrinter {
     }
 
     private fun usable(c: Context): BluetoothAdapter {
-        val ad = adapter(c) ?: throw BtError("this phone has no Bluetooth")
+        val ad = adapter(c) ?: throw BtError("this device has no Bluetooth")
         if (!hasPermission(c)) throw BtError("Parchi needs the Nearby devices permission for Bluetooth printers (Settings › Printers › Choose printer)")
         if (!isOn(c)) throw BtError("Bluetooth is off")
         return ad

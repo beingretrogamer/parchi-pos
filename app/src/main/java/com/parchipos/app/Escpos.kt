@@ -89,6 +89,8 @@ object Escpos {
         b.left().line("-".repeat(w))
         b.bold(true).size(0x01).line(row2("TOKEN ${sale.label}", dateTime(sale.time), w)).size(0).bold(false)
         b.line(row2("Bill ${sale.id}", sale.customer, w))
+        // From the first Parchi Cloud connection on: the GST-style invoice number.
+        sale.invoiceNo?.let { b.line("Invoice $it") }
         b.line("-".repeat(w))
 
         // Columns: item (variable) | qty (3) | rate (6) | amount (8)
@@ -196,7 +198,7 @@ object Escpos {
             .line(dateTime(System.currentTimeMillis()))
             .line("-".repeat(w))
             .line("If you can read this,")
-            .line("this phone can reach the printer.")
+            .line("this device can reach the printer.")
             .line("$w columns" + if (shop.small) ", small print" else "")
             .line("-".repeat(w))
             .cut()

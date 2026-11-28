@@ -11,8 +11,8 @@ android {
         applicationId = "com.parchipos.app"
         minSdk = 24          // Android 7 — covers any phone still behind a counter
         targetSdk = 34
-        versionCode = 13
-        versionName = "0.6.2"
+        versionCode = 14
+        versionName = "0.7.0"
     }
 
     /*
@@ -53,6 +53,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    // BuildConfig.VERSION_NAME: what the phone tells Parchi Cloud it runs.
+    buildFeatures { buildConfig = true }
+    // Robolectric tests open real screens, so they need the app's layouts and strings.
+    testOptions { unitTests.isIncludeAndroidResources = true }
 }
 
 dependencies {

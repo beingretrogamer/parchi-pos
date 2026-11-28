@@ -80,6 +80,9 @@ class MainActivity : Activity() {
     private lateinit var discountLine: TextView
     private lateinit var btnCharge: Button
     private lateinit var btnBillDay: TextView
+    private lateinit var cloudDot: TextView
+    /** A sync brought something: the menu may have changed (the cart never does). */
+    private val cloudChanged: () -> Unit = { if (!isFinishing) { reloadMenu(); renderCloudDot() } }
 
     private var menu: List<MenuItem> = emptyList()
     /** Insertion-ordered, so the bill lists items in the order they were rung up. */
@@ -133,6 +136,9 @@ class MainActivity : Activity() {
         discountLine = findViewById(R.id.discountLine)
         btnCharge = findViewById(R.id.btnCharge)
         btnBillDay = findViewById(R.id.btnBillDay)
+        cloudDot = findViewById(R.id.cloudDot)
+        cloudDot.contentDescription = getString(R.string.cloud_dot_desc)
+        cloudDot.setOnClickListener { open(CloudActivity::class.java) }
         btnBillDay.setOnClickListener { if (billDay != null) setBillDay(null) else pickBillDay() }
 
         findViewById<Button>(R.id.btnSales).setOnClickListener { open(SalesActivity::class.java) }
@@ -173,6 +179,7 @@ class MainActivity : Activity() {
     override fun onPause() {
         super.onPause()
         ui.removeCallbacks(syncTick)
+        SyncEngine.unlisten(cloudChanged)
     }
 
     /** Sales' "add a missed bill" lands here with the day it was showing. */
@@ -186,8 +193,23 @@ class MainActivity : Activity() {
         super.onResume()
         reloadMenu()
         renderCart()
+        renderCloudDot()
+        SyncEngine.listen(cloudChanged)
         ui.removeCallbacks(syncTick)
         syncTick.run()
+    }
+
+    /** Green when every bill is up, amber with the count when some are waiting, red when sync has stopped. */
+    private fun renderCloudDot() {
+        if (!Cloud.connected(this)) { cloudDot.visibility = View.GONE; return }
+        val st = Cloud.status(this)
+        cloudDot.visibility = View.VISIBLE
+        cloudDot.text = if (st.outbox > 0) getString(R.string.dot_waiting, st.outbox) else getString(R.string.dot_live)
+        cloudDot.setTextColor(getColor(when (st.state) {
+            Cloud.State.LIVE -> R.color.ok
+            Cloud.State.WAITING, Cloud.State.OFFLINE -> R.color.warn
+            else -> R.color.danger
+        }))
     }
 
     /** Menu and shop name, as changed on another screen or on another phone. */
@@ -482,7 +504,8 @@ class MainActivity : Activity() {
         note.setText(line?.note ?: "")
 
         // Custom items can be kept on the menu, so they are not typed in again next time.
-        val custom = line == null || line.itemId == null
+        // Connected, the menu is the account's: managers save to it with their PIN (next update).
+        val custom = (line == null || line.itemId == null) && !Cloud.connected(this)
         val saveBox = form.findViewById<CheckBox>(R.id.lineSaveToMenu)
         val saveCategory = form.findViewById<AutoCompleteTextView>(R.id.lineCategory)
         form.findViewById<View>(R.id.saveBlock).visibility = if (custom) View.VISIBLE else View.GONE
@@ -636,9 +659,10 @@ class MainActivity : Activity() {
         val now: Long
         val token: Int
         // Tokens count per phone (other phones' bills are in Sales too, under their own letters).
-        val letter = Prefs.letter(this)
+        val letter = Cloud.letter(this)
         if (day == null) {
-            now = System.currentTimeMillis()
+            // Parchi Cloud's clock when connected, so a phone with a wrong clock still files today as today.
+            now = Cloud.now(this)
             // A bill moved onto today in Sales may already hold the next number.
             val today = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(now))
             token = Prefs.nextToken(this, atLeast = Sales.maxToken(this, today, "", letter) + 1)
@@ -646,7 +670,7 @@ class MainActivity : Activity() {
             // Today's clock time on the missed day, so the bills keep the order
             // they were entered in. Tokens carry on from that day's last one and
             // leave today's counter alone.
-            val clock = Calendar.getInstance()
+            val clock = Calendar.getInstance().apply { timeInMillis = Cloud.now(this@MainActivity) }
             now = Calendar.getInstance().apply {
                 timeInMillis = day
                 set(Calendar.HOUR_OF_DAY, clock.get(Calendar.HOUR_OF_DAY))
@@ -656,11 +680,17 @@ class MainActivity : Activity() {
             val dayKey = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(now))
             token = Sales.maxToken(this, dayKey, "", letter) + 1
         }
+        val me = Cloud.me(this)
         val sale = Sale(
             id = Sales.billId(now, letter, token),
             token = token,
             letter = letter,
             time = now,
+            updatedAt = Cloud.now(this),
+            deviceId = me?.deviceId,
+            origin = me?.name ?: "",
+            customerId = if (payment == CREDIT) Customers.ensure(this, name) else null,
+            invoiceNo = Cloud.nextInvoice(this, SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(now))),
             lines = cart.values.map {
                 SaleLine(it.name, it.price, it.qty, it.note, itemId = it.itemId, variant = it.variant, custom = it.itemId == null, taxRate = it.tax)
             },

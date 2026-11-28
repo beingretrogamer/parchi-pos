@@ -337,6 +337,14 @@
 
             <TextView style="@style/SectionLabel" android:text="@string/section_bill" />
 
+            <TextView
+                android:id="@+id/headerNote"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/accent"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
             <TextView style="@style/FieldLabel" android:text="@string/label_shop_name" />
             <EditText
                 android:id="@+id/shopName"
@@ -374,8 +382,40 @@
                 android:inputType="textCapSentences" />
         </LinearLayout>
 
-        <!-- ── Cloud sync ─────────────────────────────────────── -->
+        <!-- ── Parchi Cloud ───────────────────────────────────── -->
         <LinearLayout
+            android:id="@+id/cloudCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/card"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <TextView style="@style/SectionLabel" android:text="@string/title_cloud" />
+
+            <TextView
+                android:id="@+id/cloudEntry"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/ink_soft"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/btnOpenCloud"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/btn_secondary"
+                android:text="@string/btn_open_cloud"
+                android:textAllCaps="false"
+                android:textColor="@color/ink"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- ── Cloud sync (IceCreamOS), until a phone moves to Parchi Cloud ── -->
+        <LinearLayout
+            android:id="@+id/iceCreamCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"

@@ -35,10 +35,15 @@ object Sync {
 
     private class SyncError(msg: String) : Exception(msg)
 
-    fun configured(c: Context) = Prefs.syncKey(c).isNotEmpty()
+    /**
+     * Some sync is set up: Parchi Cloud, or the old IceCreamOS key. Once a
+     * phone is connected to Parchi Cloud, IceCreamOS sync stops for it.
+     */
+    fun configured(c: Context) = Cloud.connected(c) || Prefs.syncKey(c).isNotEmpty()
 
     /** Sales whose current state the server has not acknowledged, oldest edit first. */
     fun pending(c: Context): List<Sale> {
+        if (Cloud.connected(c)) return Store.bills(c, "dirty = 1")
         val sent = sent(c)
         return Sales.all(c).filter { (sent[it.uid] ?: -1L) < it.updatedAt }.sortedBy { it.updatedAt }
     }
@@ -49,6 +54,7 @@ object Sync {
      * [done] runs on the sync thread with an error message, or "" on success.
      */
     fun kick(c: Context, done: ((String) -> Unit)? = null) {
+        if (Cloud.connected(c)) { SyncEngine.kick(c, done); return }
         if (!configured(c) || !running.compareAndSet(false, true)) return
         val app = c.applicationContext
         thread(name = "parchi-sync") {
