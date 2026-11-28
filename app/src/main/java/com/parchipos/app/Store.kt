@@ -25,22 +25,28 @@ import java.util.UUID
  * - Each row also carries the sync bookkeeping: edit times per field group,
  *   the server's sequence number, and `dirty` while a local edit is unsent.
  *
+ * - Bills and payments also note where they came from ([Src]), so a device
+ *   only ever uploads what was rung up on it, and leaving an account takes
+ *   off what came from it.
+ *
  * The first open imports sales.jsonl, receipts.jsonl and menu.json, in one
  * transaction, and renames them to *.imported, kept as a backup.
  */
 object Store {
     private const val NAME = "parchi.db"
-    private const val VERSION = 1
+    private const val VERSION = 2
 
     @Volatile private var helper: Helper? = null
 
-    private class Helper(c: Context) : SQLiteOpenHelper(c, NAME, null, VERSION) {
+    private class Helper(private val app: Context) : SQLiteOpenHelper(app, NAME, null, VERSION) {
         override fun onCreate(db: SQLiteDatabase) {
             SCHEMA.forEach(db::execSQL)
         }
 
-        // Future versions add tables and columns here, never rebuild one.
-        override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+        // Each version adds tables and columns, never rebuilds one.
+        override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+            if (oldVersion < 2) Provenance.upgrade(app, db)
+        }
     }
 
     private val SCHEMA = listOf(
@@ -51,7 +57,8 @@ object Store {
              payment TEXT NOT NULL, customer TEXT NOT NULL DEFAULT '', customer_id TEXT,
              voided INTEGER NOT NULL DEFAULT 0, total INTEGER NOT NULL,
              data TEXT NOT NULL, updated_at INTEGER NOT NULL, field_times TEXT,
-             seq INTEGER NOT NULL DEFAULT 0, dirty INTEGER NOT NULL DEFAULT 0, sync_error TEXT)""",
+             seq INTEGER NOT NULL DEFAULT 0, dirty INTEGER NOT NULL DEFAULT 0, sync_error TEXT,
+             src TEXT NOT NULL DEFAULT 'own')""",
         "CREATE INDEX bills_day ON bills(day)",
         "CREATE INDEX bills_payment ON bills(payment)",
         "CREATE INDEX bills_dirty ON bills(dirty)",
@@ -59,7 +66,8 @@ object Store {
              id TEXT PRIMARY KEY, day TEXT NOT NULL, time INTEGER NOT NULL,
              customer TEXT NOT NULL DEFAULT '', customer_id TEXT, voided INTEGER NOT NULL DEFAULT 0,
              data TEXT NOT NULL, updated_at INTEGER NOT NULL, field_times TEXT,
-             seq INTEGER NOT NULL DEFAULT 0, dirty INTEGER NOT NULL DEFAULT 0, sync_error TEXT)""",
+             seq INTEGER NOT NULL DEFAULT 0, dirty INTEGER NOT NULL DEFAULT 0, sync_error TEXT,
+             src TEXT NOT NULL DEFAULT 'own')""",
         "CREATE INDEX receipts_dirty ON receipts(dirty)",
         // Everything else Parchi Cloud syncs: categories, menu items, customers, outlet, rules, staff…
         """CREATE TABLE records (
@@ -115,11 +123,14 @@ object Store {
 
     /**
      * Writes a bill's whole state. [dirty] marks a local edit Parchi Cloud
-     * hasn't got yet; a state that came from a server is saved clean.
+     * hasn't got yet; a state that came from a server is saved clean. A new
+     * bill is [src]; one already here keeps where it came from.
      */
-    fun saveBill(c: Context, s: Sale, dirty: Boolean = true) {
+    fun saveBill(c: Context, s: Sale, dirty: Boolean = true, src: String = Src.OWN) {
         val db = db(c)
-        val base = db.rawQuery("SELECT data FROM bills WHERE id = ?", arrayOf(s.uid)).use { if (it.moveToFirst()) JSONObject(it.getString(0)) else null }
+        val (base, kept) = db.rawQuery("SELECT data, src FROM bills WHERE id = ?", arrayOf(s.uid)).use {
+            if (it.moveToFirst()) JSONObject(it.getString(0)) to it.getString(1) else null to null
+        }
         val data = Bills.toData(s, base)
         val times = s.fieldTimes.ifEmpty { Bills.allGroups(s.updatedAt) }
         db.insertWithOnConflict("bills", null, ContentValues().apply {
@@ -139,6 +150,7 @@ object Store {
             put("updated_at", s.updatedAt)
             put("field_times", JSONObject(times as Map<*, *>).toString())
             put("dirty", if (dirty) 1 else 0)
+            put("src", kept ?: src)
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
@@ -160,9 +172,12 @@ object Store {
 
     // ── receipts ────────────────────────────────────────────────────────
 
+    /** A payment taken here, or an edit of one already here (which keeps where it came from). */
     fun saveReceipt(c: Context, r: Receipt, dirty: Boolean = true) {
         val db = db(c)
-        val base = db.rawQuery("SELECT data FROM receipts WHERE id = ?", arrayOf(r.uid)).use { if (it.moveToFirst()) JSONObject(it.getString(0)) else null }
+        val (base, kept) = db.rawQuery("SELECT data, src FROM receipts WHERE id = ?", arrayOf(r.uid)).use {
+            if (it.moveToFirst()) JSONObject(it.getString(0)) to it.getString(1) else null to null
+        }
         val data = Receipts.toData(r, base)
         val times = r.fieldTimes.ifEmpty { Receipts.allGroups(r.updatedAt) }
         db.insertWithOnConflict("receipts", null, ContentValues().apply {
@@ -176,6 +191,7 @@ object Store {
             put("updated_at", r.updatedAt)
             put("field_times", JSONObject(times as Map<*, *>).toString())
             put("dirty", if (dirty) 1 else 0)
+            put("src", kept ?: Src.OWN)
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
@@ -256,6 +272,8 @@ object Store {
         val byUser: String? = null,
         val proof: String? = null,
         val outletId: String? = null,
+        /** Bills and payments only: see [Src]. */
+        val src: String = Src.OWN,
     )
 
     fun tableOf(kind: String) = when (kind) {
@@ -266,9 +284,9 @@ object Store {
 
     fun raw(c: Context, kind: String, id: String): Raw? = when (val t = tableOf(kind)) {
         "records" -> record(c, kind, id)?.let { Raw(t, kind, id, it.data, it.updatedAt, null, it.deleted, it.dirty, it.seq, it.byUser, it.proof, it.outletId) }
-        else -> db(c).rawQuery("SELECT data, updated_at, field_times, dirty, seq FROM $t WHERE id = ?", arrayOf(id)).use {
+        else -> db(c).rawQuery("SELECT data, updated_at, field_times, dirty, seq, src FROM $t WHERE id = ?", arrayOf(id)).use {
             if (!it.moveToFirst()) null
-            else Raw(t, kind, id, JSONObject(it.getString(0)), it.getLong(1), times(it.getString(2)), false, it.getInt(3) == 1, it.getLong(4))
+            else Raw(t, kind, id, JSONObject(it.getString(0)), it.getLong(1), times(it.getString(2)), false, it.getInt(3) == 1, it.getLong(4), src = it.getString(5))
         }
     }
 
@@ -340,8 +358,8 @@ object Store {
         arrayOf(limit.toString()),
     ).use { cur -> buildList { while (cur.moveToNext()) add(cur.getString(0)) } }
 
-    /** A bill exactly as the server holds it (or as merged), with this phone's display name for its phone. */
-    fun putBillRecord(c: Context, id: String, data: JSONObject, updatedAt: Long, fieldTimes: Map<String, Long>?, seq: Long, dirty: Boolean, phone: String) {
+    /** A bill exactly as the server holds it (or as merged), with this device's display name for its device. */
+    fun putBillRecord(c: Context, id: String, data: JSONObject, updatedAt: Long, fieldTimes: Map<String, Long>?, seq: Long, dirty: Boolean, phone: String, src: String) {
         val s = Bills.fromData(id, phone, data, updatedAt, fieldTimes ?: emptyMap())
         db(c).insertWithOnConflict("bills", null, ContentValues().apply {
             put("id", id)
@@ -362,10 +380,11 @@ object Store {
             put("seq", seq)
             put("dirty", if (dirty) 1 else 0)
             putNull("sync_error")
+            put("src", src)
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
-    fun putReceiptRecord(c: Context, id: String, data: JSONObject, updatedAt: Long, fieldTimes: Map<String, Long>?, seq: Long, dirty: Boolean) {
+    fun putReceiptRecord(c: Context, id: String, data: JSONObject, updatedAt: Long, fieldTimes: Map<String, Long>?, seq: Long, dirty: Boolean, src: String) {
         db(c).insertWithOnConflict("receipts", null, ContentValues().apply {
             put("id", id)
             put("day", data.optString("day"))
@@ -379,8 +398,12 @@ object Store {
             put("seq", seq)
             put("dirty", if (dirty) 1 else 0)
             putNull("sync_error")
+            put("src", src)
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
+
+    fun count(c: Context, table: String, where: String): Int =
+        db(c).rawQuery("SELECT COUNT(*) FROM $table WHERE $where", null).use { it.moveToFirst(); it.getInt(0) }
 
     fun deleteRow(c: Context, kind: String, id: String) {
         val t = tableOf(kind)
@@ -614,6 +637,7 @@ internal object Import {
             put("updated_at", s.updatedAt)
             put("field_times", JSONObject(Bills.allGroups(s.updatedAt) as Map<*, *>).toString())
             put("dirty", 0)
+            put("src", if (s.phone.isEmpty()) Src.OWN else Src.FEED)
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 

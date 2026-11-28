@@ -14,6 +14,9 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /** Add, edit, reorder and remove what the till sells. */
 class MenuActivity : ParchiActivity() {
@@ -58,6 +61,7 @@ class MenuActivity : ParchiActivity() {
         for (id in listOf(R.id.btnAdd, R.id.btnPaste)) findViewById<View>(id).visibility = if (readOnly) View.GONE else View.VISIBLE
         // The built-in board would replace the whole account's menu: only for a device of its own.
         findViewById<View>(R.id.btnReset).visibility = if (connected) View.GONE else View.VISIBLE
+        findViewById<Button>(R.id.btnReset).setText(if (!connected && MenuBackups.list(this).isNotEmpty()) R.string.btn_restore_menu else R.string.btn_reset_menu)
         if (connected) itemList.addView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, 0, 0, dp(12))
@@ -208,10 +212,38 @@ class MenuActivity : ParchiActivity() {
             .show()
     }
 
+    /**
+     * A device of its own can go back to a menu it saved (before the SQLite
+     * store, or when it joined an account) or to the board menu.
+     */
     private fun confirmReset() {
+        val saved = MenuBackups.list(this)
+        if (saved.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setMessage(R.string.reset_confirm)
+                .setPositiveButton(R.string.btn_reset_menu) { _, _ -> Menu.resetToDefault(this); render() }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+            return
+        }
+        val when_ = SimpleDateFormat("d MMM, HH:mm", Locale.getDefault())
+        val rows = saved.map { b ->
+            getString(R.string.backup_row, b.title, b.items.size, when_.format(Date(b.savedAt)),
+                b.items.take(4).joinToString(", ") { it.name } + if (b.items.size > 4) "…" else "")
+        } + getString(R.string.backup_board)
         AlertDialog.Builder(this)
-            .setMessage(R.string.reset_confirm)
-            .setPositiveButton(R.string.btn_reset_menu) { _, _ -> Menu.resetToDefault(this); render() }
+            .setTitle(R.string.title_restore_menu)
+            .setItems(rows.toTypedArray()) { _, i ->
+                val b = saved.getOrNull(i)
+                AlertDialog.Builder(this)
+                    .setMessage(if (b == null) getString(R.string.reset_confirm) else getString(R.string.restore_confirm, Menu.all(this).size, b.title, b.items.size))
+                    .setPositiveButton(R.string.btn_replace_menu) { _, _ ->
+                        if (b == null) Menu.resetToDefault(this) else Menu.replaceAll(this, b.items)
+                        render()
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+            }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
     }

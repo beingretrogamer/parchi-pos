@@ -54,6 +54,15 @@
     <string name="help_price">For sizes or flavours, separate them with /. The till asks which one.</string>
     <string name="err_price_sizes">Enter a price like 60, or sizes like Half 40 / Full 80</string>
     <string name="btn_reset_menu">Reset to the board menu</string>
+    <string name="btn_restore_menu">Restore a saved menu</string>
+    <string name="title_restore_menu">Restore a menu</string>
+    <string name="btn_replace_menu">Replace the menu</string>
+    <string name="backup_row">%1$s\n%2$d items · %3$s\n%4$s</string>
+    <string name="backup_board">The board menu (TUB\'s and Scoops &amp; Sips)</string>
+    <string name="backup_before_cloud">This device\'s menu before Parchi Cloud</string>
+    <string name="backup_connecting_to">Saved on joining %1$s</string>
+    <string name="backup_connecting">Saved on joining Parchi Cloud</string>
+    <string name="restore_confirm">Replace this device\'s menu (%1$d items) with \"%2$s\" (%3$d items)? Past bills are not affected.</string>
     <string name="reset_confirm">Replace the whole menu with the items from the TUB\'s and Scoops &amp; Sips boards? Your changes to the menu will be lost. Past bills are not affected.</string>
     <string name="label_item_category">Category</string>
     <string name="hint_category">e.g. Scoops, Shakes</string>
@@ -282,8 +291,8 @@
     <string name="phone_removed">  (removed)</string>
     <string name="section_problems">NOT ACCEPTED BY PARCHI CLOUD</string>
     <string name="btn_disconnect">Disconnect this device</string>
-    <string name="disconnect_confirm">Disconnect from %1$s? Everything stays on this device and it carries on as a till of its own. The owner should remove it in the portal to free its slot.</string>
-    <string name="disconnect_waiting">%1$d changes haven\'t uploaded yet. They stay on this device but won\'t reach the account.</string>
+    <string name="disconnect_confirm">Disconnect from %1$s?\n\nThis device keeps its own %2$d bills and %3$d dues payments, and the menu as it is now, and carries on as a till of its own.\n\nThe %4$d bills and %5$d payments that came down from the account come off this device. They stay in the account.\n\nThe owner should remove this device in the portal to free its slot.</string>
+    <string name="disconnect_waiting">%1$d changes haven\'t uploaded yet and won\'t reach the account.</string>
     <string name="disconnected">Disconnected. This device is a till of its own again.</string>
     <string name="cloud_entry_off">Not connected. Connect to share bills with the shop\'s other devices.</string>
     <string name="cloud_entry_on">%1$s · %2$s</string>

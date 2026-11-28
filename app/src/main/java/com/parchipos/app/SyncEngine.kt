@@ -312,14 +312,16 @@ object SyncEngine {
             state = remote
             dirty = false
         }
+        // A bill or payment already here keeps where it came from; anything new came from the cloud.
+        val src = local?.src ?: Src.CLOUD
         when (kind) {
             "bill" -> if (state.deleted && !dirty) Store.deleteRow(c, kind, id) else {
                 val d = state.data
-                Store.putBillRecord(c, id, d, state.updatedAt, state.fieldTimes, seq, dirty,
-                    Cloud.phoneOf(c, d.optStringOrNull("deviceId"), d.optString("origin", ""), d.optString("letter", "")))
+                val phone = if (src == Src.OWN) "" else Cloud.phoneOf(c, d.optStringOrNull("deviceId"), d.optString("origin", ""), d.optString("letter", ""))
+                Store.putBillRecord(c, id, d, state.updatedAt, state.fieldTimes, seq, dirty, phone, src)
             }
             "receipt" -> if (state.deleted && !dirty) Store.deleteRow(c, kind, id)
-                else Store.putReceiptRecord(c, id, state.data, state.updatedAt, state.fieldTimes, seq, dirty)
+                else Store.putReceiptRecord(c, id, state.data, state.updatedAt, state.fieldTimes, seq, dirty, src)
             else -> Store.saveRecord(c, Store.Rec(
                 kind = kind, id = id, data = state.data, outletId = r.optStringOrNull("outletId"),
                 deleted = state.deleted, updatedAt = state.updatedAt,
@@ -332,8 +334,10 @@ object SyncEngine {
 
     /**
      * Once the first download is in: if the account has a menu, it replaces
-     * this phone's (saved in menu.backup.json at connect). If it has none and
-     * the phone had one, the Parchi Cloud screen offers to upload it.
+     * this device's (saved as a backup file at connect). If it has none and
+     * the device had one, the Parchi Cloud screen offers to upload it. (Only
+     * this download sets a menu record's sequence number: connecting cleared
+     * any an earlier account left.)
      */
     private fun afterFirstDownload(c: Context) {
         val accountMenu = Store.records(c, "menuItem").any { it.seq > 0 }

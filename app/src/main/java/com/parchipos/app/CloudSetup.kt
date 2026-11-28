@@ -1,9 +1,8 @@
 package com.parchipos.app
 
 import android.content.Context
-import org.json.JSONArray
+import android.database.sqlite.SQLiteDatabase
 import org.json.JSONObject
-import java.io.File
 
 /** Customer records (Parchi Cloud), one per name per outlet. */
 object Customers {
@@ -29,15 +28,23 @@ object Customers {
 /** Connecting a phone to Parchi Cloud, and leaving it. */
 object CloudSetup {
 
-    /** What this phone would upload on connecting: its own bills, and its payments. */
+    /** What this device would upload on connecting: the bills rung up on it, and its payments. */
     data class Upload(val bills: Int, val payments: Int, val firstDay: String?, val lastDay: String?)
 
     fun pendingUpload(c: Context): Upload {
-        val mine = Store.bills(c, "phone = ''")
-        val receipts = Store.receipts(c)
+        val mine = Store.bills(c, "src = '${Src.OWN}'")
+        val receipts = Store.receipts(c, "src = '${Src.OWN}'")
         val days = mine.map { it.day } + receipts.map { it.day }
         return Upload(mine.size, receipts.size, days.minOrNull(), days.maxOrNull())
     }
+
+    /** What disconnecting keeps (this device's own) and takes off (what the account gave it). */
+    data class Leave(val bills: Int, val payments: Int, val otherBills: Int, val otherPayments: Int)
+
+    fun leaving(c: Context) = Leave(
+        Store.count(c, "bills", "src != '${Src.CLOUD}'"), Store.count(c, "receipts", "src != '${Src.CLOUD}'"),
+        Store.count(c, "bills", "src = '${Src.CLOUD}'"), Store.count(c, "receipts", "src = '${Src.CLOUD}'"),
+    )
 
     /**
      * Redeems the code, then gets this phone's data ready to go up. Blocking
@@ -46,8 +53,10 @@ object CloudSetup {
     fun connect(c: Context, server: String, code: String, name: String): Cloud.Me {
         val p = CloudApi.pair(server, code.trim(), name.trim(), Prefs.letter(c).ifBlank { null }, SyncEngine.appVersion(c))
         val me = Cloud.Me(server.trimEnd('/'), p.deviceId, p.deviceKey, p.accountId, p.accountName, p.outletId, p.outletName, p.letter, name.trim(), System.currentTimeMillis())
-        Store.tx(c) {
+        Store.tx(c) { db ->
             for (key in listOf("cloud.cursor", "cloud.windowDone", "cloud.windowUpTo", "cloud.historyFrom", "cloud.removed", "cloud.upgrade", "cloud.error", "cloud.devices", "cloud.menuChoice", "cloud.headerChoice")) Store.put(c, key, null)
+            // A new account starts its own invoice series; the first sync raises it if this device's slot had one.
+            db.execSQL("DELETE FROM kv WHERE key LIKE 'inv.%'")
             Cloud.saveMe(c, me)
             Cloud.setClockOffset(c, if (p.serverTime > 0) p.serverTime - System.currentTimeMillis() else 0)
             prepare(c, me)
@@ -59,17 +68,20 @@ object CloudSetup {
      * Gets the history ready to upload, without changing any edit time (the
      * server has none of it yet):
      *
-     * - This phone's own bills are stamped with its device id and name, and go.
+     * - Anything an earlier account gave this device is dropped first, and
+     *   its menu becomes the device's own again ([forgetAccount]).
+     * - This device's own bills are stamped with its new device id and name,
+     *   and go. So do its payments.
      * - Other phones' bills (seen through the IceCreamOS feed) stay here and
      *   don't go: each phone uploads its own, so nothing arrives twice under
      *   two names.
      * - Every credit name becomes a customer; bills and payments point to it.
-     * - Payments were never shared, so all of them are this phone's.
-     * - The menu is saved to menu.backup.json, and waits for the first
-     *   download to decide whether the account's menu replaces it.
+     * - The menu is saved as a backup file, and waits for the first download
+     *   to decide whether the account's menu replaces it.
      */
     internal fun prepare(c: Context, me: Cloud.Me) {
         val db = Store.db(c)
+        forgetAccount(db)
         val names = LinkedHashMap<String, Pair<String, Long>>() // customer id → (name as last typed, when)
         fun customer(name: String, time: Long): String? {
             if (name.isBlank()) return null
@@ -79,32 +91,27 @@ object CloudSetup {
             return id
         }
 
-        for (s in Store.bills(c)) {
-            val mine = s.phone.isEmpty()
-            val cid = if (s.onCredit) customer(s.customer, s.time) else s.customerId
-            val fixed = if (mine) s.copy(deviceId = s.deviceId ?: me.deviceId, origin = s.origin.ifBlank { me.name }, customerId = cid) else s.copy(customerId = cid)
-            val raw = Store.raw(c, "bill", s.uid) ?: continue
-            Store.putBillRecord(c, s.uid, Bills.toData(fixed, raw.data), raw.updatedAt, raw.fieldTimes, 0, dirty = mine, phone = s.phone)
+        for (src in listOf(Src.OWN, Src.FEED)) {
+            val own = src == Src.OWN
+            for (s in Store.bills(c, "src = ?", arrayOf(src))) {
+                val cid = if (s.onCredit) customer(s.customer, s.time) else null
+                val fixed = if (own) s.copy(deviceId = me.deviceId, origin = s.origin.ifBlank { me.name }, phone = "", customerId = cid) else s.copy(customerId = cid)
+                val raw = Store.raw(c, "bill", s.uid) ?: continue
+                Store.putBillRecord(c, s.uid, Bills.toData(fixed, raw.data), raw.updatedAt, raw.fieldTimes, 0, dirty = own, phone = fixed.phone, src = src)
+            }
         }
-        for (r in Store.receipts(c)) {
+        for (r in Store.receipts(c, "src = ?", arrayOf(Src.OWN))) {
             val cid = customer(r.customer, r.time) ?: continue
             val raw = Store.raw(c, "receipt", r.uid) ?: continue
-            Store.putReceiptRecord(c, r.uid, Receipts.toData(r.copy(customerId = cid, deviceId = r.deviceId ?: me.deviceId), raw.data), raw.updatedAt, raw.fieldTimes, 0, dirty = true)
+            Store.putReceiptRecord(c, r.uid, Receipts.toData(r.copy(customerId = cid, deviceId = me.deviceId), raw.data), raw.updatedAt, raw.fieldTimes, 0, dirty = true, src = Src.OWN)
         }
         val now = System.currentTimeMillis()
         for ((id, v) in names) {
-            if (Store.record(c, "customer", id) == null) {
-                Store.saveRecord(c, Store.Rec("customer", id, JSONObject().put("name", v.first), outletId = me.outletId, updatedAt = now, dirty = true))
-            }
+            Store.saveRecord(c, Store.Rec("customer", id, JSONObject().put("name", v.first), outletId = me.outletId, updatedAt = now, dirty = true))
         }
 
         val menu = Menu.all(c)
-        if (menu.isNotEmpty()) {
-            File(c.filesDir, "menu.backup.json").writeText(JSONArray().apply {
-                menu.forEach { m -> put(JSONObject().put("name", m.name).put("price", m.price).put("category", m.category)
-                    .put("variants", JSONArray().apply { m.variants.forEach { put(JSONObject().put("label", it.label).put("price", it.price)) } })) }
-            }.toString())
-        }
+        if (menu.isNotEmpty()) MenuBackups.save(c, menu, me.accountName)
         Store.put(c, "cloud.localMenu", if (menu.isNotEmpty()) "1" else null)
         // Menu edits made before connecting go up only by choice, with a manager's PIN.
         db.execSQL("UPDATE records SET dirty = 0 WHERE kind IN ('category','menuItem','itemStatus')")
@@ -115,17 +122,32 @@ object CloudSetup {
     }
 
     /**
-     * Back to a phone of its own. Everything stays on the phone, including
-     * the bills of other phones; the portal still lists this phone until it is
-     * removed there.
+     * Back to a device of its own, with what is its own: the bills and
+     * payments rung up on it (and any IceCreamOS feed bills it held before),
+     * and the menu as it is now. What the account gave it comes off: other
+     * devices' bills and payments, customers, staff, the till rules, the
+     * outlet's settings, sold-out marks. They are all still in the account.
+     * The portal lists this device until it is removed there.
      */
     fun disconnect(c: Context) {
-        Store.tx(c) {
-            Store.db(c).execSQL("DELETE FROM kv WHERE key LIKE 'cloud.%'")
-            Store.db(c).execSQL("UPDATE bills SET dirty = 0")
-            Store.db(c).execSQL("UPDATE receipts SET dirty = 0")
-            Store.db(c).execSQL("UPDATE records SET dirty = 0")
+        Store.tx(c) { db ->
+            db.execSQL("DELETE FROM kv WHERE (key LIKE 'cloud.%' AND key != 'cloud.server') OR key LIKE 'inv.%'")
+            forgetAccount(db)
         }
+    }
+
+    /**
+     * Drops what only an account held, so none of it can follow this device
+     * into another account. The menu stays, as the device's own (no sequence
+     * number, no PIN signature), so the till keeps working.
+     */
+    private fun forgetAccount(db: SQLiteDatabase) {
+        db.delete("bills", "src = ?", arrayOf(Src.CLOUD))
+        db.delete("receipts", "src = ?", arrayOf(Src.CLOUD))
+        db.execSQL("UPDATE bills SET seq = 0, dirty = 0, sync_error = NULL")
+        db.execSQL("UPDATE receipts SET seq = 0, dirty = 0, sync_error = NULL")
+        db.delete("records", "kind NOT IN ('category','menuItem') OR deleted = 1", null)
+        db.execSQL("UPDATE records SET seq = 0, dirty = 0, by_user = NULL, proof = NULL, sync_error = NULL")
     }
 
     // ── manager PINs ────────────────────────────────────────────────────
@@ -170,7 +192,7 @@ object CloudSetup {
         }
     }
 
-    /** Uses the account's menu after all: this phone's own is dropped (it is in menu.backup.json). */
+    /** Uses the account's menu after all: this device's own is dropped (it is in a backup file; see [MenuBackups]). */
     fun keepAccountMenu(c: Context) {
         Store.tx(c) {
             Store.db(c).delete("records", "kind IN ('category','menuItem') AND seq = 0", null)

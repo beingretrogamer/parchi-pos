@@ -192,7 +192,7 @@ object Sales {
                             invoiceNo = l?.invoiceNo,
                             fieldTimes = Bills.allGroups(r.updatedAt),
                         )
-                        Store.saveBill(c, merged, dirty = false)
+                        Store.saveBill(c, merged, dirty = false, src = Src.FEED) // a bill already here keeps its own source
                         settled.add(r.uid)
                     }
                     l.updatedAt == r.updatedAt -> settled.add(r.uid)

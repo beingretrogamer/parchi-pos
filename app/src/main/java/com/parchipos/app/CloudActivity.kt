@@ -222,7 +222,9 @@ class CloudActivity : ParchiActivity() {
     private fun disconnectNow() {
         val me = Cloud.me(this) ?: return
         val waiting = Store.outboxCount(this)
-        val msg = getString(R.string.disconnect_confirm, me.accountName) + if (waiting > 0) "\n\n" + getString(R.string.disconnect_waiting, waiting) else ""
+        val l = CloudSetup.leaving(this)
+        val msg = getString(R.string.disconnect_confirm, me.accountName, l.bills, l.payments, l.otherBills, l.otherPayments) +
+            if (waiting > 0) "\n\n" + getString(R.string.disconnect_waiting, waiting) else ""
         AlertDialog.Builder(this)
             .setMessage(msg)
             .setPositiveButton(R.string.btn_disconnect) { _, _ ->

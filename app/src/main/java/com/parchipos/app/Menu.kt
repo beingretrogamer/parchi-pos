@@ -68,10 +68,18 @@ object Menu {
     }
 
     /** Swaps in the menu from the boards, for a fresh start. */
-    fun resetToDefault(c: Context) {
+    fun resetToDefault(c: Context) = replaceAll(c, parseLines(DEFAULT_MENU).items)
+
+    /**
+     * The whole menu becomes [items], in their order, under their categories
+     * in the order they first appear. Every current item and category is
+     * archived first. Past bills are not affected: their lines are copies.
+     */
+    fun replaceAll(c: Context, items: List<MenuItem>) {
         Store.tx(c) {
             all(c).forEach { remove(c, it.id) }
-            parseLines(DEFAULT_MENU).items.forEach { save(c, it) }
+            Store.records(c, "category").forEach { put(c, it.copy(deleted = true, updatedAt = maxOf(System.currentTimeMillis(), it.updatedAt + 1), dirty = true)) }
+            items.forEach { save(c, it.copy(id = it.id.ifBlank { newId() })) }
         }
     }
 
@@ -336,4 +344,56 @@ object Menu {
         Water Bottle Small, 10, Drinks
         Cold Drink Can, 70, Drinks
     """.trimIndent()
+}
+
+/**
+ * Menus kept as files on the device: the one it had before the SQLite store
+ * (menu.json.imported) and one saved each time it connects to an account,
+ * whose menu then replaces it. A device of its own can restore any of them.
+ */
+object MenuBackups {
+    data class Saved(val file: java.io.File, val title: String, val savedAt: Long, val items: List<MenuItem>)
+
+    fun save(c: Context, items: List<MenuItem>, account: String) {
+        val now = System.currentTimeMillis()
+        val list = JSONArray()
+        items.forEach { m ->
+            list.put(JSONObject().put("id", m.id).put("name", m.name).put("price", m.price).put("category", m.category)
+                .put("variants", JSONArray().apply { m.variants.forEach { put(JSONObject().put("label", it.label).put("price", it.price)) } }))
+        }
+        var stamp = now
+        while (java.io.File(c.filesDir, "menu.backup-$stamp.json").exists()) stamp++ // two connects in one millisecond keep both
+        java.io.File(c.filesDir, "menu.backup-$stamp.json").writeText(JSONObject().put("savedAt", now).put("account", account).put("items", list).toString())
+    }
+
+    /** Newest first; empty or unreadable files are left out. */
+    fun list(c: Context): List<Saved> {
+        val files = c.filesDir.listFiles { f -> f.name == "menu.json.imported" || (f.name.startsWith("menu.backup") && f.name.endsWith(".json")) } ?: return emptyList()
+        return files.mapNotNull { read(c, it) }.filter { it.items.isNotEmpty() }.sortedByDescending { it.savedAt }
+    }
+
+    private fun read(c: Context, f: java.io.File): Saved? = try {
+        val text = f.readText().trim()
+        // menu.json and the first backups are a bare list; later backups say when and for which account.
+        val wrapped = if (text.startsWith("{")) JSONObject(text) else null
+        val arr = wrapped?.getJSONArray("items") ?: JSONArray(text)
+        val items = (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            val va = o.optJSONArray("variants") ?: JSONArray()
+            MenuItem(
+                o.optString("id", "").ifBlank { Menu.newId() }, o.getString("name"), o.optDouble("price", 0.0).takeUnless(Double::isNaN) ?: 0.0,
+                o.optString("category", ""),
+                (0 until va.length()).map { j -> va.getJSONObject(j).let { v -> Variant(v.getString("label"), v.getDouble("price")) } },
+            )
+        }
+        val account = wrapped?.optString("account")?.ifBlank { null }
+        val title = when {
+            f.name == "menu.json.imported" -> c.getString(R.string.backup_before_cloud)
+            account != null -> c.getString(R.string.backup_connecting_to, account)
+            else -> c.getString(R.string.backup_connecting)
+        }
+        Saved(f, title, wrapped?.optLong("savedAt", f.lastModified()) ?: f.lastModified(), items)
+    } catch (_: Exception) {
+        null
+    }
 }

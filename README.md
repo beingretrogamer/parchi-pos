@@ -147,13 +147,18 @@ saved and printed first, and goes up when the device is online.
 
 What happens on connect:
 
-- **Uploads.** This device's own bills and all its dues payments go up.
-  Bills it saw from other devices (through IceCreamOS) stay where they are;
-  each device uploads its own.
+- **Uploads.** Only what was rung up on this device goes up: its own bills
+  and its dues payments, stamped with its new device id.
+  - Bills it saw from other devices (through IceCreamOS) stay where they are;
+    each device uploads its own.
+  - Anything it got from an earlier account never goes. That includes the
+    bills of a device whose slot it took over with **Replace**: they show as
+    this device's while it is in that account, but they came from the account.
+  - The server refuses a new bill or payment stamped with another device's id.
 - **Its letter.** It keeps its old letter if it's free.
 - **Menu.**
   - If the account already has a menu, it replaces the device's. The old one
-    is kept in `menu.backup.json`.
+    is kept in a backup file (`menu.backup-<time>.json`, one per connect).
   - If the account has none yet, the Parchi Cloud screen offers to upload
     the device's menu. That needs an owner's or manager's PIN.
 - **Bill header.** It works the same way as the menu.
@@ -215,8 +220,20 @@ unused for the set minutes.
 - Devices that aren't connected never lock.
 
 **Disconnect this device**, at the bottom of the Parchi Cloud screen, turns it
-back into a till of its own and keeps everything on it. It needs the owner's
-PIN. Remove it in the portal as well, to free its place on the licence.
+back into a till of its own. It needs the owner's PIN, and the confirmation
+says what stays and what goes:
+
+- **Stays:** the bills and payments rung up on this device, any IceCreamOS feed
+  bills it held before connecting, and the menu as it is now.
+- **Comes off:** what came down from the account. That means other devices'
+  bills and payments, customers, staff, till rules, the outlet's settings and
+  sold-out marks. It is all still in the account.
+
+Remove the device in the portal as well, to free its place on the licence.
+
+**Restore a saved menu** (Menu screen, on a device that isn't connected) brings
+back the menu it had before Parchi Cloud, or the one saved when it joined an
+account, or the board menu.
 
 ## Cloud sync (IceCreamOS)
 
