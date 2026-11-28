@@ -317,8 +317,22 @@ object Store {
         db(c).update(t, ContentValues().apply { put("dirty", 0); put("sync_error", reason.take(200)) }, where, args)
     }
 
-    /** Rows the server refused, newest first, for the Parchi Cloud screen and diagnostics. */
-    fun rejected(c: Context, limit: Int = 20): List<String> = db(c).rawQuery(
+    /** A refusal that left nothing behind to mark (an edit that was undone): kept as a line of text. */
+    fun noteProblem(c: Context, text: String) {
+        val list = try { JSONArray(get(c, "cloud.problems") ?: "[]") } catch (_: Exception) { JSONArray() }
+        val next = JSONArray().put(text)
+        for (i in 0 until minOf(list.length(), 9)) next.put(list.optString(i))
+        put(c, "cloud.problems", next.toString())
+    }
+
+    /** Rows the server refused, and undone edits, newest first, for the Parchi Cloud screen and diagnostics. */
+    fun rejected(c: Context, limit: Int = 20): List<String> = notes(c) + rows(c, limit)
+
+    private fun notes(c: Context): List<String> = try {
+        JSONArray(get(c, "cloud.problems") ?: "[]").let { a -> (0 until a.length()).map { a.optString(it) } }
+    } catch (_: Exception) { emptyList() }
+
+    private fun rows(c: Context, limit: Int): List<String> = db(c).rawQuery(
         """SELECT 'Bill ' || bill_no || ': ' || sync_error, updated_at FROM bills WHERE sync_error IS NOT NULL
            UNION ALL SELECT 'Payment ' || customer || ': ' || sync_error, updated_at FROM receipts WHERE sync_error IS NOT NULL
            UNION ALL SELECT kind || ' ' || id || ': ' || sync_error, updated_at FROM records WHERE sync_error IS NOT NULL
@@ -431,6 +445,7 @@ internal object Bills {
         o.putOrRemove("discountReason", s.discountReason.ifBlank { null })
         o.put("voided", s.voided)
         o.putOrRemove("voidReason", s.voidReason.ifBlank { null })
+        if (s.approvals.isNotEmpty()) o.put("approvals", ApprovalNote.toArray(s.approvals)) else o.remove("approvals")
         return o
     }
 
@@ -487,6 +502,7 @@ internal object Bills {
             customerId = o.optStringOrNull("customerId"),
             invoiceNo = o.optStringOrNull("invoiceNo"),
             fieldTimes = fieldTimes,
+            approvals = ApprovalNote.listFrom(o.optJSONArray("approvals")),
         )
     }
 }
@@ -510,6 +526,7 @@ internal object Receipts {
         o.putOrRemove("note", r.note.ifBlank { null })
         o.put("voided", r.voided)
         o.putOrRemove("voidReason", r.voidReason.ifBlank { null })
+        if (r.approvals.isNotEmpty()) o.put("approvals", ApprovalNote.toArray(r.approvals)) else o.remove("approvals")
         return o
     }
 
@@ -529,6 +546,7 @@ internal object Receipts {
             fieldTimes = Store.times(cur.getString(3)),
             deviceId = o.optStringOrNull("deviceId"),
             customerId = o.optStringOrNull("customerId"),
+            approvals = ApprovalNote.listFrom(o.optJSONArray("approvals")),
         )
     } catch (_: Exception) {
         null

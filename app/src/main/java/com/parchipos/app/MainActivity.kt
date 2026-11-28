@@ -32,6 +32,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 /**
  * The till: tap items, take payment, and both slips come out.
@@ -40,7 +41,7 @@ import java.util.Locale
  * cart clears straight away, so the next customer is never waiting on a slow
  * printer — and a printer that is off never costs a sale, only a reprint.
  */
-class MainActivity : Activity() {
+class MainActivity : ParchiActivity() {
 
     /**
      * A snapshot of the menu item at the moment it was rung up, editable from
@@ -60,6 +61,8 @@ class MainActivity : Activity() {
         val variant: String? = null,
         /** GST percent from the menu when rung up. */
         val tax: Double? = null,
+        /** The menu's price when rung up, so a changed price can be told apart; null for custom items. */
+        val basePrice: Double? = null,
     )
 
     private lateinit var titleView: TextView
@@ -81,6 +84,16 @@ class MainActivity : Activity() {
     private lateinit var btnCharge: Button
     private lateinit var btnBillDay: TextView
     private lateinit var cloudDot: TextView
+    private lateinit var managerChip: TextView
+    /** PINs that let restricted actions through for the order being rung up; they go on its bill. */
+    private val approvals = ArrayList<Manager.Approval>()
+    /** Counts down an unlock on the chip. */
+    private val chipTick = object : Runnable {
+        override fun run() {
+            renderManagerChip()
+            if (Manager.remainingMs() > 0) ui.postDelayed(this, 1000)
+        }
+    }
     /** A sync brought something: the menu may have changed (the cart never does). */
     private val cloudChanged: () -> Unit = { if (!isFinishing) { reloadMenu(); renderCloudDot() } }
 
@@ -139,6 +152,9 @@ class MainActivity : Activity() {
         cloudDot = findViewById(R.id.cloudDot)
         cloudDot.contentDescription = getString(R.string.cloud_dot_desc)
         cloudDot.setOnClickListener { open(CloudActivity::class.java) }
+        managerChip = findViewById(R.id.managerChip)
+        managerChip.contentDescription = getString(R.string.manager_locked_desc)
+        managerChip.setOnClickListener { managerTapped() }
         btnBillDay.setOnClickListener { if (billDay != null) setBillDay(null) else pickBillDay() }
 
         findViewById<Button>(R.id.btnSales).setOnClickListener { open(SalesActivity::class.java) }
@@ -155,7 +171,7 @@ class MainActivity : Activity() {
         btnDiscount.setOnClickListener { editDiscount() }
         findViewById<Button>(R.id.btnLedger).setOnClickListener { open(LedgerActivity::class.java) }
         findViewById<View>(R.id.btnClear).setOnClickListener { clearCart() }
-        findViewById<Button>(R.id.btnCustom).setOnClickListener { editLine(null, query()) }
+        findViewById<Button>(R.id.btnCustom).setOnClickListener { newCustom(query()) }
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
@@ -167,7 +183,7 @@ class MainActivity : Activity() {
         btnCharge.setOnClickListener { charge(printSlips = true) }
         findViewById<Button>(R.id.btnSave).setOnClickListener { charge(printSlips = false) }
         renderPayment()
-        intent.takeIf { it.hasExtra(EXTRA_BILL_DAY) }?.let { setBillDay(it.getLongExtra(EXTRA_BILL_DAY, 0)) }
+        intent.takeIf { it.hasExtra(EXTRA_BILL_DAY) }?.let { chooseBillDay(it.getLongExtra(EXTRA_BILL_DAY, 0)) }
     }
 
     /** An order in progress keeps its date; an empty till goes back to today. */
@@ -179,13 +195,14 @@ class MainActivity : Activity() {
     override fun onPause() {
         super.onPause()
         ui.removeCallbacks(syncTick)
+        ui.removeCallbacks(chipTick)
         SyncEngine.unlisten(cloudChanged)
     }
 
     /** Sales' "add a missed bill" lands here with the day it was showing. */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (intent.hasExtra(EXTRA_BILL_DAY)) setBillDay(intent.getLongExtra(EXTRA_BILL_DAY, 0))
+        if (intent.hasExtra(EXTRA_BILL_DAY)) chooseBillDay(intent.getLongExtra(EXTRA_BILL_DAY, 0))
     }
 
     /** Menu and shop name may have changed on another screen. */
@@ -197,6 +214,44 @@ class MainActivity : Activity() {
         SyncEngine.listen(cloudChanged)
         ui.removeCallbacks(syncTick)
         syncTick.run()
+        ui.removeCallbacks(chipTick)
+        chipTick.run()
+    }
+
+    /** Shown once someone here has a PIN: a padlock, or who is unlocked and for how long. */
+    private fun renderManagerChip() {
+        if (!Manager.available(this)) { managerChip.visibility = View.GONE; return }
+        managerChip.visibility = View.VISIBLE
+        val name = Manager.unlockedName()
+        if (name == null) {
+            managerChip.text = getString(R.string.manager_chip_locked)
+            managerChip.setTextColor(getColor(R.color.ink_soft))
+            managerChip.setTypeface(null, Typeface.NORMAL)
+        } else {
+            val left = (Manager.remainingMs() + 999) / 1000
+            managerChip.text = getString(R.string.manager_chip_open, "${name.substringBefore(' ')} ${left / 60}:${(left % 60).toString().padStart(2, '0')}")
+            managerChip.setTextColor(getColor(R.color.accent))
+            managerChip.setTypeface(null, Typeface.BOLD)
+        }
+    }
+
+    /** Locked: unlock with a PIN. Unlocked: say who, and offer to lock. */
+    private fun managerTapped() {
+        val name = Manager.unlockedName()
+        if (name == null) {
+            Manager.unlock(this) { s ->
+                Toast.makeText(this, getString(R.string.unlocked_toast, s.staff.name), Toast.LENGTH_SHORT).show()
+                ui.removeCallbacks(chipTick)
+                chipTick.run()
+            }
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.manager_unlocked_title, name))
+            .setMessage(getString(R.string.manager_unlocked_body, name))
+            .setPositiveButton(R.string.btn_lock_now) { _, _ -> Manager.lock(); renderManagerChip() }
+            .setNegativeButton(R.string.btn_keep, null)
+            .show()
     }
 
     /** Green when every bill is up, amber with the count when some are waiting, red when sync has stopped. */
@@ -307,7 +362,8 @@ class MainActivity : Activity() {
     private fun tile(item: MenuItem): View {
         val qty = cart.values.filter { it.itemId == item.id }.sumOf { it.qty }
         val prices = item.variants.map { it.price }.ifEmpty { listOf(item.price) }
-        val priceText = if (prices.min() == prices.max()) rs(prices.min()) else "${rs(prices.min())} – ${rs(prices.max())}"
+        val priceText = if (item.soldOut) getString(R.string.sold_out)
+            else if (prices.min() == prices.max()) rs(prices.min()) else "${rs(prices.min())} – ${rs(prices.max())}"
 
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -328,14 +384,20 @@ class MainActivity : Activity() {
             text = priceText
             textSize = 13f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(getColor(R.color.accent))
+            setTextColor(getColor(if (item.soldOut) R.color.ink_faint else R.color.accent))
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             topMargin = dp(4)
         })
 
         return FrameLayout(this).apply {
             setBackgroundResource(if (qty > 0) R.drawable.tile_selected else R.drawable.tile)
-            setOnClickListener { pick(item) }
+            if (item.soldOut) alpha = 0.45f
+            setOnClickListener {
+                if (item.soldOut) Toast.makeText(this@MainActivity, getString(R.string.toast_sold_out, item.name), Toast.LENGTH_SHORT).show()
+                else pick(item)
+            }
+            // Connected: long-press marks it sold out (or back) on every device of the outlet.
+            if (Cloud.connected(this@MainActivity)) setOnLongClickListener { toggleSoldOut(item); true }
             addView(body, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             if (qty > 0) addView(TextView(this@MainActivity).apply {
                 text = qty.toString()
@@ -363,7 +425,30 @@ class MainActivity : Activity() {
         setPadding(dp(8), dp(8), dp(8), dp(8))
         setTextColor(getColor(R.color.accent))
         setBackgroundResource(R.drawable.tile_custom)
-        setOnClickListener { editLine(null, q) }
+        setOnClickListener { newCustom(q) }
+    }
+
+    /** Sold out, or back, for the whole outlet; a PIN first if the till rules say so. */
+    private fun toggleSoldOut(item: MenuItem) {
+        AlertDialog.Builder(this)
+            .setTitle(item.name)
+            .setItems(arrayOf(getString(if (item.soldOut) R.string.mark_in_stock else R.string.mark_sold_out, item.name))) { _, _ ->
+                Manager.approve(this, Rules.SOLD_OUT) { approval ->
+                    Menu.setSoldOut(this, item.id, !item.soldOut, approval)
+                    Sync.kick(this)
+                    reloadMenu()
+                    Toast.makeText(this, getString(if (item.soldOut) R.string.in_stock_toast else R.string.sold_out_toast, item.name), Toast.LENGTH_SHORT).show()
+                }
+            }
+            .show()
+    }
+
+    /** Something that isn't on the menu: a PIN first if the till rules say so. */
+    private fun newCustom(prefill: String) {
+        Manager.approve(this, Rules.OPEN_ITEMS) { approval ->
+            approval?.let(approvals::add)
+            editLine(null, prefill)
+        }
     }
 
     /** Single-price items go straight in; the rest ask which size or flavour. */
@@ -475,7 +560,7 @@ class MainActivity : Activity() {
     // ── Actions ───────────────────────────────────────────────────────
 
     private fun addLine(key: String, itemId: String?, name: String, price: Double, variant: String?, tax: Double?) {
-        cart.getOrPut(key) { CartLine(key, itemId, name, price, 0, variant = variant, tax = tax) }.qty += 1
+        cart.getOrPut(key) { CartLine(key, itemId, name, price, 0, variant = variant, tax = tax, basePrice = price) }.qty += 1
         renderGrid()
         renderCart()
     }
@@ -504,8 +589,8 @@ class MainActivity : Activity() {
         note.setText(line?.note ?: "")
 
         // Custom items can be kept on the menu, so they are not typed in again next time.
-        // Connected, the menu is the account's: managers save to it with their PIN (next update).
-        val custom = (line == null || line.itemId == null) && !Cloud.connected(this)
+        // Connected, the menu is the account's: saving to it needs an owner's or manager's PIN.
+        val custom = line == null || line.itemId == null
         val saveBox = form.findViewById<CheckBox>(R.id.lineSaveToMenu)
         val saveCategory = form.findViewById<AutoCompleteTextView>(R.id.lineCategory)
         form.findViewById<View>(R.id.saveBlock).visibility = if (custom) View.VISIBLE else View.GONE
@@ -528,25 +613,33 @@ class MainActivity : Activity() {
             val n = name.text.toString().trim()
             val p = price.text.toString().trim().toDoubleOrNull()
             val q = qty.text.toString().trim().toIntOrNull()
+            fun apply(p: Double, q: Int) {
+                val target = line ?: CartLine("custom-" + Menu.newId(), null, n, p, 0).also { cart[it.key] = it }
+                target.name = n
+                target.price = p
+                target.qty = q
+                target.note = note.text.toString().trim()
+                if (q == 0) cart.remove(target.key)
+                dialog.dismiss()
+                if (custom && saveBox.isChecked) {
+                    val cat = saveCategory.text.toString().trim()
+                    // Connected, the menu is the account's: whoever saves to it unlocks first.
+                    if (Cloud.connected(this)) Manager.unlock(this) { target.itemId = saveToMenu(n, p, cat); reloadMenu() }
+                    else { target.itemId = saveToMenu(n, p, cat); reloadMenu() }
+                }
+                renderGrid()
+                renderCart()
+            }
             when {
                 n.isEmpty() -> name.error = getString(R.string.err_name)
                 p == null || p < 0 -> price.error = getString(R.string.err_price)
                 q == null || q < 0 -> qty.error = getString(R.string.err_qty)
-                else -> {
-                    val target = line ?: CartLine("custom-" + Menu.newId(), null, n, p, 0).also { cart[it.key] = it }
-                    target.name = n
-                    target.price = p
-                    target.qty = q
-                    target.note = note.text.toString().trim()
-                    if (q == 0) cart.remove(target.key)
-                    if (custom && saveBox.isChecked) {
-                        target.itemId = saveToMenu(n, p, saveCategory.text.toString().trim())
-                        reloadMenu()
-                    }
-                    dialog.dismiss()
-                    renderGrid()
-                    renderCart()
+                // A menu item at a price other than the menu's: a PIN first if the till rules say so.
+                line?.basePrice != null && p != line.price && p != line.basePrice -> Manager.approve(this, Rules.PRICE_EDIT) { approval ->
+                    approval?.let(approvals::add)
+                    apply(p, q)
                 }
+                else -> apply(p, q)
             }
         }
         // A custom item named from the search box only needs its price.
@@ -622,17 +715,25 @@ class MainActivity : Activity() {
             val o = off()
             val v = value.text.toString().trim().ifEmpty { "0" }.toDoubleOrNull()
             if (o == null || v == null) { value.error = getString(R.string.err_discount); return@setOnClickListener }
-            if (kind.checkedRadioButtonId == R.id.discPercent) { discountPct = v; discountFlat = 0.0 }
-            else { discountPct = null; discountFlat = v }
-            discountReason = reason.text.toString().trim()
-            if (v == 0.0) { discountPct = null; discountFlat = 0.0; discountReason = "" }
-            dialog.dismiss()
-            renderCart()
+            fun apply() {
+                if (kind.checkedRadioButtonId == R.id.discPercent) { discountPct = v; discountFlat = 0.0 }
+                else { discountPct = null; discountFlat = v }
+                discountReason = reason.text.toString().trim()
+                if (v == 0.0) { discountPct = null; discountFlat = 0.0; discountReason = "" }
+                dialog.dismiss()
+                renderCart()
+            }
+            // Over the limit in the till rules: a PIN first.
+            if (Rules.discountNeedsPin(this, o, subtotal)) Manager.approve(this, Rules.DISCOUNT) { approval ->
+                approval?.let { approvals.removeAll { a -> a.action == Rules.DISCOUNT }; approvals.add(it) }
+                apply()
+            } else apply()
         }
     }
 
     private fun clearCart() {
         cart.clear()
+        approvals.clear()
         billDay = null
         discountPct = null
         discountFlat = 0.0
@@ -653,6 +754,15 @@ class MainActivity : Activity() {
             // A credit bill with no name could never be collected.
             customer.error = getString(R.string.err_credit_name)
             customer.requestFocus()
+            return
+        }
+        // The cart may have shrunk since the discount was approved: a bigger share of the bill needs its own PIN.
+        val subtotalNow = cart.values.sumOf { it.price * it.qty }
+        if (Rules.discountNeedsPin(this, discountAmount(subtotalNow), subtotalNow) && approvals.none { it.action == Rules.DISCOUNT }) {
+            Manager.approve(this, Rules.DISCOUNT) { approval ->
+                approval?.let(approvals::add)
+                if (approval != null || !Rules.needsPin(this, Rules.DISCOUNT)) charge(printSlips)
+            }
             return
         }
         val day = billDay
@@ -681,7 +791,10 @@ class MainActivity : Activity() {
             token = Sales.maxToken(this, dayKey, "", letter) + 1
         }
         val me = Cloud.me(this)
+        val uid = UUID.randomUUID().toString()
         val sale = Sale(
+            uid = uid,
+            approvals = approvals.map { ApprovalNote.from(it.toJson(uid)) },
             id = Sales.billId(now, letter, token),
             token = token,
             letter = letter,
@@ -747,10 +860,20 @@ class MainActivity : Activity() {
     private fun pickBillDay() {
         val c = Calendar.getInstance()
         DatePickerDialog(this, { _, y, m, d ->
-            setBillDay(Calendar.getInstance().apply { clear(); set(y, m, d) }.timeInMillis)
+            chooseBillDay(Calendar.getInstance().apply { clear(); set(y, m, d) }.timeInMillis)
         }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).apply {
             datePicker.maxDate = c.timeInMillis
         }.show()
+    }
+
+    /** A day picked for a missed bill: a past one needs a PIN first if the till rules say so. */
+    private fun chooseBillDay(time: Long) {
+        val today = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+        if (SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(time)) >= today) { setBillDay(null); return }
+        Manager.approve(this, Rules.BACK_DATE) { approval ->
+            approval?.let { approvals.removeAll { a -> a.action == Rules.BACK_DATE }; approvals.add(it) }
+            setBillDay(time)
+        }
     }
 
     /** Null, or any time today, goes back to billing now. */

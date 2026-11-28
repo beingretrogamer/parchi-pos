@@ -24,7 +24,7 @@ import kotlin.concurrent.thread
  * Voided bills stay listed (struck through) rather than disappearing, so the
  * count of tokens handed out still adds up at closing.
  */
-class SalesActivity : Activity() {
+class SalesActivity : ParchiActivity() {
 
     private lateinit var dayLabel: TextView
     private lateinit var dayTotal: TextView
@@ -90,7 +90,14 @@ class SalesActivity : Activity() {
         dayLabel.text = if (isToday()) getString(R.string.today) else SimpleDateFormat("EEE, d MMM yyyy", Locale.getDefault()).format(day.time)
 
         val live = sales.filterNot { it.voided }
-        dayTotal.text = MainActivity.rs(live.sumOf { it.total })
+        // The till rules may keep the day's totals for managers; the bills themselves always show.
+        val hideTotals = Rules.needsPin(this, Rules.STAFF_SEES_TOTALS) && Manager.current(this) == null
+        dayTotal.setOnClickListener(if (hideTotals) View.OnClickListener { Manager.unlock(this) { load(kick = false) } } else null)
+        dayTotal.isClickable = hideTotals
+        dayTotal.textSize = if (hideTotals) 15f else 28f
+        daySplit.visibility = if (hideTotals) View.GONE else View.VISIBLE
+        findViewById<Button>(R.id.btnShare).visibility = if (hideTotals) View.GONE else View.VISIBLE
+        dayTotal.text = if (hideTotals) getString(R.string.totals_hidden) else MainActivity.rs(live.sumOf { it.total })
         val cash = live.filter { it.payment == "CASH" }.sumOf { it.total }
         val upi = live.filter { it.payment == "UPI" }.sumOf { it.total }
         val credit = live.filter { it.onCredit }.sumOf { it.total }
@@ -112,7 +119,7 @@ class SalesActivity : Activity() {
             if (voided > 0) "\n" + getString(R.string.day_voided, voided) else ""
 
         dayItems.text = Summary.itemTotals(sales).joinToString("\n") { (name, qty) -> "${qty.toString().padStart(4)}  $name" }
-        dayItems.visibility = if (live.isEmpty()) View.GONE else View.VISIBLE
+        dayItems.visibility = if (live.isEmpty() || hideTotals) View.GONE else View.VISIBLE
 
         noBills.visibility = if (sales.isEmpty()) View.VISIBLE else View.GONE
         findViewById<Button>(R.id.btnAddMissed).visibility = if (isToday()) View.GONE else View.VISIBLE
@@ -177,9 +184,9 @@ class SalesActivity : Activity() {
                     0 -> reprint(s, bill = true, parchi = true)
                     1 -> reprint(s, bill = true, parchi = false)
                     2 -> reprint(s, bill = false, parchi = true)
-                    3 -> confirmVoid(s)
-                    4 -> changeDate(s)
-                    5 -> changePayment(s)
+                    3 -> Manager.approve(this, Rules.VOID_BILL) { confirmVoid(s, it) }
+                    4 -> Manager.approve(this, Rules.BACK_DATE) { changeDate(s, it) }
+                    5 -> Manager.approve(this, Rules.CHANGE_PAYMENT) { changePayment(s, it) }
                 }
             }
             .show()
@@ -195,11 +202,11 @@ class SalesActivity : Activity() {
     }
 
     /** For bills that landed on the wrong day. The bill follows to its new day's list. */
-    private fun changeDate(s: Sale) {
+    private fun changeDate(s: Sale, approval: Manager.Approval?) {
         val c = Calendar.getInstance().apply { timeInMillis = s.time }
         DatePickerDialog(this, { _, y, m, d ->
             val day = Calendar.getInstance().apply { clear(); set(y, m, d) }
-            val moved = Sales.moveToDay(this, s.uid, day.timeInMillis) ?: return@DatePickerDialog
+            val moved = Sales.moveToDay(this, s.uid, day.timeInMillis, approval) ?: return@DatePickerDialog
             if (moved.id == s.id) return@DatePickerDialog
             this.day.timeInMillis = day.timeInMillis
             load()
@@ -209,21 +216,21 @@ class SalesActivity : Activity() {
         }.show()
     }
 
-    private fun confirmVoid(s: Sale) {
+    private fun confirmVoid(s: Sale, approval: Manager.Approval?) {
         if (s.voided) {
-            Sales.setVoided(this, s.uid, false)
+            Sales.setVoided(this, s.uid, false, approval = approval)
             load()
             return
         }
         // A void always needs a reason, kept on the bill, shown in Sales and exported.
         Dialogs.askReason(this, getString(R.string.void_confirm, s.label, MainActivity.rs(s.total)), getString(R.string.void_bill)) { reason ->
-            Sales.setVoided(this, s.uid, true, reason)
+            Sales.setVoided(this, s.uid, true, reason, approval)
             load()
         }
     }
 
     /** Cash, UPI or credit. Moving to credit needs a customer name, since that is the account it goes on. */
-    private fun changePayment(s: Sale) {
+    private fun changePayment(s: Sale, approval: Manager.Approval?) {
         val modes = listOf("CASH", "UPI", CREDIT).filter { it != s.payment }
         val names = modes.map {
             when (it) { "CASH" -> getString(R.string.pay_cash); "UPI" -> getString(R.string.pay_upi); else -> getString(R.string.pay_credit) }
@@ -236,7 +243,7 @@ class SalesActivity : Activity() {
                     toast(getString(R.string.err_credit_needs_name))
                     return@setItems
                 }
-                Sales.setPayment(this, s.uid, to)
+                Sales.setPayment(this, s.uid, to, approval)
                 load()
                 toast(getString(R.string.payment_changed, s.label, names[which]))
             }

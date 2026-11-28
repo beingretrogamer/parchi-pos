@@ -25,6 +25,8 @@ data class MenuItem(
     val categoryId: String? = null,
     /** GST percent rung up with it: its own rate, else its category's. Read-only here; set in the portal. */
     val tax: Double? = null,
+    /** Greyed out on every device of the outlet until it is back (Parchi Cloud). */
+    val soldOut: Boolean = false,
 )
 
 /**
@@ -39,8 +41,12 @@ object Menu {
 
     fun all(c: Context): List<MenuItem> {
         val cats = Store.records(c, "category").associateBy { it.id }
+        val outlet = Cloud.me(c)?.outletId
+        val soldOut = if (outlet == null) emptySet() else Store.records(c, "itemStatus")
+            .filter { it.outletId == outlet && it.data.optBoolean("soldOut") }
+            .mapTo(HashSet()) { it.data.optString("itemId") }
         return Store.records(c, "menuItem")
-            .map { fromRecord(it, cats) }
+            .map { fromRecord(it, cats).let { m -> if (m.id in soldOut) m.copy(soldOut = true) else m } }
             .sortedWith(compareBy<MenuItem>({ cats[it.categoryId]?.data?.optDouble("sort")?.takeUnless(Double::isNaN) ?: Double.MAX_VALUE }, { it.sort }, { it.name.lowercase(Locale.ROOT) }))
     }
 
@@ -84,7 +90,7 @@ object Menu {
                 val sort = (i + 1).toDouble()
                 if (s.sort == sort) return@forEachIndexed
                 val rec = Store.record(c, "menuItem", s.id) ?: return@forEachIndexed
-                Store.saveRecord(c, rec.copy(data = JSONObject(rec.data.toString()).put("sort", sort), updatedAt = maxOf(now, rec.updatedAt + 1), dirty = true))
+                put(c, rec.copy(data = JSONObject(rec.data.toString()).put("sort", sort), updatedAt = maxOf(now, rec.updatedAt + 1), dirty = true))
             }
         }
     }
@@ -95,7 +101,32 @@ object Menu {
         return siblings.indexOf(item) + delta in siblings.indices
     }
 
+    /**
+     * Sold out, or back, on every device of this outlet. Signed by whoever
+     * approved it, when the till rules want a manager for it.
+     */
+    fun setSoldOut(c: Context, itemId: String, soldOut: Boolean, approval: Manager.Approval?) {
+        val outlet = Cloud.me(c)?.outletId ?: return
+        Store.tx(c) {
+            val id = "$outlet:$itemId"
+            val old = Store.record(c, "itemStatus", id)
+            val rec = Store.Rec(
+                kind = "itemStatus",
+                id = id,
+                data = JSONObject().put("itemId", itemId).put("soldOut", soldOut),
+                outletId = outlet,
+                updatedAt = maxOf(Cloud.now(c), (old?.updatedAt ?: 0) + 1),
+                seq = old?.seq ?: 0,
+                dirty = true,
+            )
+            Store.saveRecord(c, Manager.signedBy(c, rec, approval))
+        }
+    }
+
     fun newId(): String = UUID.randomUUID().toString()
+
+    /** Connected, the menu is the account's: an edit goes up signed by the owner or manager who unlocked. */
+    private fun put(c: Context, rec: Store.Rec) = Store.saveRecord(c, Manager.signed(c, rec))
 
     /** Category names match ignoring case and extra spaces. */
     fun catKey(name: String): String = name.trim().replace(Regex("\\s+"), " ").lowercase(Locale.ROOT)
@@ -114,7 +145,7 @@ object Menu {
             v.copy(id = v.id.ifEmpty { match?.optString("id") ?: Store.randomId("v") })
         }
         val now = System.currentTimeMillis()
-        Store.saveRecord(c, Store.Rec(
+        put(c, Store.Rec(
             kind = "menuItem",
             id = item.id,
             data = itemData(item.copy(sort = sort, variants = variants), catId, existing?.data),
@@ -125,7 +156,7 @@ object Menu {
 
     private fun remove(c: Context, id: String) {
         val rec = Store.record(c, "menuItem", id) ?: return
-        Store.saveRecord(c, rec.copy(deleted = true, updatedAt = maxOf(System.currentTimeMillis(), rec.updatedAt + 1), dirty = true))
+        put(c, rec.copy(deleted = true, updatedAt = maxOf(System.currentTimeMillis(), rec.updatedAt + 1), dirty = true))
     }
 
     /** The category with this name, created if there is none. Its id comes from the name, so two phones make the same one. */
@@ -135,7 +166,7 @@ object Menu {
         val id = Store.stableId("cat", key)
         val sort = (Store.records(c, "category").maxOfOrNull { it.data.optDouble("sort", 0.0) } ?: 0.0) + 1
         val old = Store.record(c, "category", id)
-        Store.saveRecord(c, Store.Rec(
+        put(c, Store.Rec(
             kind = "category",
             id = id,
             data = (old?.data?.let { JSONObject(it.toString()) } ?: JSONObject()).put("name", name).put("sort", sort),

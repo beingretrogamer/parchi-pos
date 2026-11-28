@@ -26,7 +26,7 @@ import java.util.Locale
  * Opened without [EXTRA_CUSTOMER] it lists every account. With one it is that
  * customer's statement.
  */
-class LedgerActivity : Activity() {
+class LedgerActivity : ParchiActivity() {
 
     private lateinit var title: TextView
     private lateinit var total: TextView
@@ -136,13 +136,16 @@ class LedgerActivity : Activity() {
             .setItems(items) { _, which ->
                 when (which) {
                     0 -> printReceipt(r)
-                    1 -> if (r.voided) {
-                        Ledger.setReceiptVoided(this, r.uid, false, "")
-                        load()
-                    } else {
-                        Dialogs.askReason(this, getString(R.string.void_receipt_confirm, MainActivity.rs(r.credited)), getString(R.string.void_receipt)) { reason ->
-                            Ledger.setReceiptVoided(this, r.uid, true, reason)
+                    // A PIN first if the till rules say so; the approval stays on the payment.
+                    1 -> Manager.approve(this, Rules.VOID_RECEIPT) { approval ->
+                        if (r.voided) {
+                            Ledger.setReceiptVoided(this, r.uid, false, "", approval)
                             load()
+                        } else {
+                            Dialogs.askReason(this, getString(R.string.void_receipt_confirm, MainActivity.rs(r.credited)), getString(R.string.void_receipt)) { reason ->
+                                Ledger.setReceiptVoided(this, r.uid, true, reason, approval)
+                                load()
+                            }
                         }
                     }
                 }

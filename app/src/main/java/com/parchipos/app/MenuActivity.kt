@@ -16,7 +16,7 @@ import android.widget.TextView
 import android.widget.Toast
 
 /** Add, edit, reorder and remove what the till sells. */
-class MenuActivity : Activity() {
+class MenuActivity : ParchiActivity() {
 
     private lateinit var itemList: LinearLayout
     private lateinit var noItems: TextView
@@ -26,25 +26,53 @@ class MenuActivity : Activity() {
         setContentView(R.layout.activity_menu)
         itemList = findViewById(R.id.itemList)
         noItems = findViewById(R.id.noItems)
-        findViewById<Button>(R.id.btnAdd).setOnClickListener { edit(null) }
-        findViewById<Button>(R.id.btnPaste).setOnClickListener { paste() }
+        findViewById<Button>(R.id.btnAdd).setOnClickListener { asManager { edit(null) } }
+        findViewById<Button>(R.id.btnPaste).setOnClickListener { asManager { paste() } }
         findViewById<Button>(R.id.btnReset).setOnClickListener { confirmReset() }
+    }
+
+    override fun onResume() {
+        super.onResume()
         render()
     }
 
-    /** Connected, the menu is the account's: shown here, edited in the portal (managers here with a PIN, next update). */
-    private val readOnly: Boolean get() = Cloud.connected(this)
+    private val connected: Boolean get() = Cloud.connected(this)
+
+    /**
+     * Connected, the menu is the account's: anyone sees it, owners and
+     * managers edit it after unlocking, and each edit goes up signed with
+     * their PIN. A device of its own edits freely, as before.
+     */
+    private val readOnly: Boolean get() = connected && Manager.current(this) == null
+
+    /** Runs [action] as the unlocked owner or manager, asking for a PIN if the unlock has run out. */
+    private fun asManager(action: () -> Unit) {
+        if (connected) Manager.unlock(this) { action(); render() } else action()
+    }
 
     private fun render() {
+        val readOnly = readOnly // once per render: it reads the staff list
         val items = Menu.all(this)
         noItems.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
         itemList.removeAllViews()
-        for (id in listOf(R.id.btnAdd, R.id.btnPaste, R.id.btnReset)) findViewById<View>(id).visibility = if (readOnly) View.GONE else View.VISIBLE
-        if (readOnly) itemList.addView(TextView(this).apply {
-            text = getString(R.string.menu_from_cloud)
-            textSize = 13f
-            setTextColor(getColor(R.color.accent))
+        for (id in listOf(R.id.btnAdd, R.id.btnPaste)) findViewById<View>(id).visibility = if (readOnly) View.GONE else View.VISIBLE
+        // The built-in board would replace the whole account's menu: only for a device of its own.
+        findViewById<View>(R.id.btnReset).visibility = if (connected) View.GONE else View.VISIBLE
+        if (connected) itemList.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             setPadding(0, 0, 0, dp(12))
+            addView(TextView(this@MenuActivity).apply {
+                text = if (readOnly) getString(R.string.menu_from_cloud_locked) else getString(R.string.menu_unlocked, Manager.unlockedName())
+                textSize = 13f
+                setTextColor(getColor(R.color.accent))
+            })
+            if (readOnly && Manager.available(this@MenuActivity)) addView(Button(this@MenuActivity).apply {
+                text = getString(R.string.btn_unlock_to_edit)
+                isAllCaps = false
+                setTextColor(getColor(R.color.ink))
+                setBackgroundResource(R.drawable.btn_secondary)
+                setOnClickListener { Manager.unlock(this@MenuActivity) { render() } }
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(40)).apply { topMargin = dp(8) })
         })
         items.forEach { item ->
             val row = LinearLayout(this).apply {
@@ -52,7 +80,7 @@ class MenuActivity : Activity() {
                 gravity = Gravity.CENTER_VERTICAL
                 minimumHeight = dp(56)
                 setBackgroundResource(R.drawable.row_bg)
-                if (!readOnly) setOnClickListener { edit(item) }
+                if (!readOnly) setOnClickListener { asManager { edit(item) } }
             }
             val label = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             label.addView(TextView(this).apply {
@@ -63,17 +91,33 @@ class MenuActivity : Activity() {
                 setTextColor(getColor(R.color.ink))
             })
             label.addView(TextView(this).apply {
-                text = listOf(Menu.formatPrice(item), item.category).filter { it.isNotBlank() }.joinToString("  ·  ")
+                text = listOf(if (item.soldOut) getString(R.string.sold_out) else "", Menu.formatPrice(item), item.category).filter { it.isNotBlank() }.joinToString("  ·  ")
                 maxLines = 2
                 ellipsize = TextUtils.TruncateAt.END
                 textSize = 13f
                 setTextColor(getColor(R.color.ink_soft))
             })
             row.addView(label, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            // Sold out for this outlet: anyone, or a PIN, as the till rules say.
+            if (connected) row.addView(TextView(this).apply {
+                text = getString(R.string.btn_sold_out_toggle)
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setPadding(dp(10), 0, dp(10), 0)
+                setTextColor(getColor(if (item.soldOut) R.color.on_accent else R.color.ink_soft))
+                setBackgroundResource(if (item.soldOut) R.drawable.chip_selected else R.drawable.chip)
+                setOnClickListener {
+                    Manager.approve(this@MenuActivity, Rules.SOLD_OUT) { approval ->
+                        Menu.setSoldOut(this@MenuActivity, item.id, !item.soldOut, approval)
+                        SyncEngine.kick(this@MenuActivity)
+                        render()
+                    }
+                }
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(32)).apply { marginEnd = dp(4) })
             // Items move within their category, which is how the till lists them.
             if (!readOnly) {
-                row.addView(arrow("↑", enabled = Menu.canMove(items, item, -1)) { Menu.move(this, item.id, -1); render() })
-                row.addView(arrow("↓", enabled = Menu.canMove(items, item, 1)) { Menu.move(this, item.id, 1); render() })
+                row.addView(arrow("↑", enabled = Menu.canMove(items, item, -1)) { asManager { Menu.move(this, item.id, -1) }; render() })
+                row.addView(arrow("↓", enabled = Menu.canMove(items, item, 1)) { asManager { Menu.move(this, item.id, 1) }; render() })
             }
             itemList.addView(row)
         }
@@ -123,8 +167,8 @@ class MenuActivity : Activity() {
                 n.isEmpty() -> name.error = getString(R.string.err_name)
                 p == null -> price.error = getString(R.string.err_price_sizes)
                 else -> {
-                    Menu.upsert(this, MenuItem(existing?.id ?: Menu.newId(), n, p.first, category.text.toString().trim(), p.second))
                     dialog.dismiss()
+                    asManager { Menu.upsert(this, MenuItem(existing?.id ?: Menu.newId(), n, p.first, category.text.toString().trim(), p.second)) }
                     render()
                 }
             }
@@ -135,7 +179,7 @@ class MenuActivity : Activity() {
     private fun confirmDelete(item: MenuItem) {
         AlertDialog.Builder(this)
             .setMessage(getString(R.string.delete_confirm, item.name))
-            .setPositiveButton(R.string.btn_delete) { _, _ -> Menu.delete(this, item.id); render() }
+            .setPositiveButton(R.string.btn_delete) { _, _ -> asManager { Menu.delete(this, item.id) }; render() }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
@@ -153,7 +197,7 @@ class MenuActivity : Activity() {
             .setView(form)
             .setPositiveButton(R.string.btn_add) { _, _ ->
                 val parsed = Menu.parseLines(input.text.toString())
-                Menu.addAll(this, parsed.items)
+                asManager { Menu.addAll(this, parsed.items) }
                 render()
                 val added = parsed.items.size
                 val msg = if (parsed.skipped == 0) getString(R.string.paste_added, added)

@@ -1,6 +1,8 @@
 package com.parchipos.app
 
 import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -24,6 +26,22 @@ data class SaleLine(
     val taxRate: Double? = null,
 ) {
     val amount: Double get() = price * qty
+}
+
+/**
+ * An owner's or manager's PIN let a restricted action through (till rules):
+ * which action, who, when, and a proof made with their PIN's key.
+ */
+data class ApprovalNote(val action: String, val userId: String, val name: String, val at: Long, val proof: String) {
+    fun toJson(): JSONObject = JSONObject().put("action", action).put("userId", userId).put("name", name).put("at", at).put("proof", proof)
+
+    companion object {
+        fun from(o: JSONObject) = ApprovalNote(o.optString("action"), o.optString("userId"), o.optString("name"), o.optLong("at"), o.optString("proof"))
+
+        fun listFrom(a: JSONArray?): List<ApprovalNote> = (0 until (a?.length() ?: 0)).mapNotNull { a!!.optJSONObject(it)?.let(::from) }
+
+        fun toArray(list: List<ApprovalNote>) = JSONArray().apply { list.forEach { put(it.toJson()) } }
+    }
 }
 
 /** The payment mode of a bill put on the customer's account (udhaar). */
@@ -67,6 +85,8 @@ data class Sale(
     val invoiceNo: String? = null,
     /** Edit time of each field group (void, payment, date, content), so edits on two phones both survive. */
     val fieldTimes: Map<String, Long> = emptyMap(),
+    /** PINs that let restricted actions through on this bill: a price change, a void… */
+    val approvals: List<ApprovalNote> = emptyList(),
 ) {
     /** What the slip and the screen call it: "A12", or "12" without a letter. */
     val label: String get() = letter + token
@@ -105,18 +125,30 @@ object Sales {
     // Edits find a bill by uid: bill ids from before token letters repeat
     // across phones, and any phone may edit any phone's bill.
 
-    fun setVoided(c: Context, uid: String, voided: Boolean, reason: String = "") = edit(c, uid, "void") {
+    fun setVoided(c: Context, uid: String, voided: Boolean, reason: String = "", approval: Manager.Approval? = null) = edit(c, uid, "void", approval) {
         it.copy(voided = voided, voidReason = if (voided) reason else "")
     }
 
-    /** For a bill rung up as Cash that was paid by UPI, or the other way round. */
-    fun setPayment(c: Context, uid: String, payment: String) = edit(c, uid, "payment") { it.copy(payment = payment) }
+    /**
+     * For a bill rung up as Cash that was paid by UPI, or the other way round,
+     * or put on the customer's account (connected, that account is a customer record).
+     */
+    fun setPayment(c: Context, uid: String, payment: String, approval: Manager.Approval? = null) = edit(c, uid, "payment", approval) {
+        it.copy(payment = payment, customerId = if (payment == CREDIT) it.customerId ?: Customers.ensure(c, it.customer) else it.customerId)
+    }
 
-    private fun edit(c: Context, uid: String, group: String, change: (Sale) -> Sale) {
+    /** One edit: [group]'s time moves to now, and so does content's when an approval is added to the bill. */
+    private fun edit(c: Context, uid: String, group: String, approval: Manager.Approval?, change: (Sale) -> Sale) {
         Store.tx(c) {
             val s = Store.bill(c, uid) ?: return@tx
             val now = editTime(c, s)
-            Store.saveBill(c, change(s).copy(updatedAt = now, fieldTimes = stamp(s, group, now)))
+            var times = stamp(s, group, now)
+            var next = change(s)
+            if (approval != null) {
+                next = next.copy(approvals = s.approvals + ApprovalNote.from(approval.toJson(s.uid)))
+                times = times + ("content" to now)
+            }
+            Store.saveBill(c, next.copy(updatedAt = now, fieldTimes = times))
         }
     }
 
@@ -175,7 +207,7 @@ object Sales {
      * token on that day, and a new id to match, since the id is date + token
      * and must not collide with a bill already there.
      */
-    fun moveToDay(c: Context, uid: String, day: Long): Sale? = Store.tx(c) {
+    fun moveToDay(c: Context, uid: String, day: Long, approval: Manager.Approval? = null): Sale? = Store.tx(c) {
         val old = Store.bill(c, uid) ?: return@tx null
         val time = Calendar.getInstance().apply {
             val clock = Calendar.getInstance().apply { timeInMillis = old.time }
@@ -196,8 +228,9 @@ object Sales {
             token = token,
             time = time,
             updatedAt = now,
-            fieldTimes = stamp(old, "date", now),
+            fieldTimes = stamp(old, "date", now) + (if (approval != null) mapOf("content" to now) else emptyMap()),
             invoiceNo = invoice,
+            approvals = if (approval != null) old.approvals + ApprovalNote.from(approval.toJson(old.uid)) else old.approvals,
         )
         Store.saveBill(c, moved)
         moved

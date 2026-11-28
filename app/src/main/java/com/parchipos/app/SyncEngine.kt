@@ -229,6 +229,8 @@ object SyncEngine {
                 val id = r.optString("id")
                 val mine = byKey[kind + "\u0000" + id] ?: continue
                 when {
+                    r.has("rejected") && Store.tableOf(kind) == "records" && kind in SIGNED_KINDS && r.optString("rejected").startsWith("needs a") ->
+                        revert(c, me, kind, id, r.optString("rejected"), r.optJSONObject("record"))
                     r.has("rejected") -> Store.markRejected(c, kind, id, r.optString("rejected"))
                     r.has("record") -> {
                         // The server holds something else (merged, or newer): take it, unless edited here meanwhile.
@@ -240,6 +242,21 @@ object SyncEngine {
                 }
             }
         }
+    }
+
+    /** Kinds the server takes from a device only with a manager's PIN (menu, header, rules, sold out). */
+    private val SIGNED_KINDS = setOf("category", "menuItem", "outlet", "rules", "itemStatus")
+
+    /**
+     * A menu or header edit refused for want of a PIN (made offline, say, by
+     * someone whose PIN has changed since): back to the server's copy, or
+     * gone if the server never had it, and a note on the Parchi Cloud screen.
+     * Sales are never undone this way; only these shared settings.
+     */
+    private fun revert(c: Context, me: Cloud.Me, kind: String, id: String, reason: String, server: JSONObject?) {
+        val name = Store.record(c, kind, id)?.data?.optString("name")?.takeIf { it.isNotBlank() } ?: "$kind $id"
+        if (server != null) applyRecord(c, me, server, forceClean = true) else Store.deleteRow(c, kind, id)
+        Store.noteProblem(c, c.getString(R.string.reverted_menu, name, reason))
     }
 
     /** Applies a page of records. True if the server has more. */

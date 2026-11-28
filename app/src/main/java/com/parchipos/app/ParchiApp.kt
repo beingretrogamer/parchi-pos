@@ -44,6 +44,8 @@ class ParchiApp : Application(), Application.ActivityLifecycleCallbacks {
 
     override fun onActivityStopped(activity: Activity) {
         if (--started > 0) return
+        // A manager's unlock ends when Parchi leaves the screen.
+        Manager.lock()
         ui.removeCallbacks(tick)
         SyncEngine.kick(this)
         if (Cloud.connected(this) && Store.outboxCount(this) > 0) SyncJob.schedule(this)

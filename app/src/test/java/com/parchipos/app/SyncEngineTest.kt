@@ -243,4 +243,27 @@ class SyncEngineTest {
         assertEquals(key, Pin.matches("2468", salt, "86cc279a4f58d6fa06154c2fff6ec018857581082f4629cbd7acd75ba8505616"))
         assertEquals(null, Pin.matches("2469", salt, "86cc279a4f58d6fa06154c2fff6ec018857581082f4629cbd7acd75ba8505616"))
     }
+
+    @Test fun aMenuEditRefusedForWantOfAPinGoesBackToTheServersCopy() {
+        val stored = JSONObject().put("kind", "menuItem").put("id", "itm_tea").put("seq", 40).put("updatedAt", t0)
+            .put("data", JSONObject().put("name", "Tea").put("price", 1000).put("sort", 1).put("variants", JSONArray()))
+        Store.saveRecord(c, Store.Rec("menuItem", "itm_tea", JSONObject().put("name", "Tea").put("price", 1).put("sort", 1).put("variants", JSONArray()), updatedAt = t0 + 5, dirty = true))
+        Store.saveRecord(c, Store.Rec("menuItem", "itm_new", JSONObject().put("name", "Fries").put("price", 6000).put("sort", 2).put("variants", JSONArray()), updatedAt = t0 + 5, dirty = true))
+        server = { req ->
+            val changes = push(req)
+            if (changes == null) 200 to reply(hello(), empty())
+            else 200 to reply(hello(), JSONObject().put("type", "ack").put("results", JSONArray()
+                .put(JSONObject().put("kind", "menuItem").put("id", "itm_tea").put("rejected", "needs a manager PIN").put("record", stored))
+                .put(JSONObject().put("kind", "menuItem").put("id", "itm_new").put("rejected", "needs a manager PIN"))), empty())
+        }
+        SyncEngine.runOnce(c)
+        val tea = Store.record(c, "menuItem", "itm_tea")!!
+        assertEquals(1000, tea.data.getInt("price"))
+        assertFalse(tea.dirty)
+        // Never on the server: it goes.
+        assertEquals(null, Store.record(c, "menuItem", "itm_new"))
+        assertEquals(0, Store.outboxCount(c))
+        assertTrue(Store.rejected(c).first().startsWith("Fries"))
+        assertTrue(Store.rejected(c).any { it.startsWith("Tea") })
+    }
 }

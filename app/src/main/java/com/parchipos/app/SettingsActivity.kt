@@ -29,7 +29,7 @@ import java.util.Locale
 import kotlin.concurrent.thread
 
 /** Printers, what the bill says at the top and bottom, cloud sync, and the print log. */
-class SettingsActivity : Activity() {
+class SettingsActivity : ParchiActivity() {
 
     private lateinit var billKind: RadioGroup
     private lateinit var printerIp: EditText
@@ -133,9 +133,13 @@ class SettingsActivity : Activity() {
         renderSync()
     }
 
+    /** The outlet's header is on screen and an owner or manager has unlocked it for editing. */
+    private var headerUnlocked = false
+
     /**
-     * Connected to Parchi Cloud: the bill header is the outlet's (read-only
-     * here, edited in the portal), and the IceCreamOS section goes away.
+     * Connected to Parchi Cloud: the bill header is the outlet's, edited in
+     * the portal or here after an owner or manager unlocks; and the
+     * IceCreamOS section goes away.
      */
     private fun renderCloud() {
         val me = Cloud.me(this)
@@ -152,12 +156,52 @@ class SettingsActivity : Activity() {
         val cloudHeader = me != null && Cloud.outlet(this) != null && Store.get(this, "cloud.headerChoice") != "ask"
         val note = findViewById<TextView>(R.id.headerNote)
         note.visibility = if (cloudHeader) View.VISIBLE else View.GONE
-        if (cloudHeader) note.text = getString(R.string.header_from_cloud, me!!.outletName)
+        val unlocked = cloudHeader && Manager.current(this) != null
+        val wasUnlocked = headerUnlocked
+        headerUnlocked = unlocked
+        if (cloudHeader) {
+            note.text = if (unlocked) getString(R.string.header_unlocked, Manager.unlockedName(), me!!.outletName)
+                else getString(R.string.header_locked, me!!.outletName) + "  " + getString(R.string.btn_unlock_to_edit) + " ›"
+            note.setOnClickListener(if (unlocked) null else View.OnClickListener { Manager.unlock(this) { renderCloud() } })
+        }
         val shown = if (cloudHeader) Prefs.shop(this) else Prefs.localShop(this)
         for ((field, value) in listOf(shopName to shown.name, address to shown.address, phone to shown.phone, gstin to shown.gstin, footer to shown.footer)) {
-            field.isEnabled = !cloudHeader
-            if (cloudHeader || !field.hasFocus()) field.setText(value)
+            field.isEnabled = !cloudHeader || unlocked
+            // What is being typed stays; a fresh unlock shows the outlet's current header to edit.
+            if (cloudHeader && (!unlocked || !wasUnlocked) || !field.hasFocus()) field.setText(value)
         }
+    }
+
+    /**
+     * The outlet's header, as typed here by whoever unlocked, signed with
+     * their PIN for every device of the outlet. The logo switch stays as the
+     * portal set it. True if something changed.
+     */
+    private fun saveCloudHeader(quiet: Boolean): Boolean {
+        if (!headerUnlocked) return false
+        val me = Cloud.me(this) ?: return false
+        val session = Manager.current(this)
+        if (session == null) {
+            if (!quiet) toast(getString(R.string.btn_unlock_to_edit))
+            return false
+        }
+        val typed = readShop()
+        val changed = Store.tx(this) {
+            val rec = Store.record(this, "outlet", me.outletId) ?: return@tx false
+            val header = JSONObject(rec.data.optJSONObject("header")?.toString() ?: "{}")
+            val before = header.toString()
+            header.put("shopName", typed.name.trim()).put("address", typed.address.trim()).put("phone", typed.phone.trim())
+                .put("gstin", typed.gstin.trim().uppercase()).put("footer", typed.footer.trim())
+            if (!header.has("logo")) header.put("logo", Prefs.localShop(this).brand)
+            if (header.toString() == before) return@tx false
+            Store.saveRecord(this, CloudSetup.sign(this, rec.copy(data = JSONObject(rec.data.toString()).put("header", header), dirty = true), session.staff, session.key))
+            true
+        }
+        if (changed) {
+            SyncEngine.kick(this)
+            if (!quiet) toast(getString(R.string.header_saved, me.outletName))
+        }
+        return changed
     }
 
     /** Leaving with Back keeps what was typed — losing it would be the surprise. */
@@ -358,8 +402,9 @@ class SettingsActivity : Activity() {
         val bad = problem(bill) ?: if (shop.printParchi && !kitchen.sameAsBill) problem(kitchen.target) else null
         if (bad != null) { if (!quiet) toast(bad); return false }
         Prefs.save(this, bill, kitchen, shop)
+        val headerSaved = saveCloudHeader(quiet)
         if (Prefs.saveSync(this, serverUrl.text.toString(), syncKey.text.toString())) Sync.forget(this)
-        if (!quiet) toast(getString(R.string.toast_saved))
+        if (!quiet && !headerSaved) toast(getString(R.string.toast_saved))
         return true
     }
 
