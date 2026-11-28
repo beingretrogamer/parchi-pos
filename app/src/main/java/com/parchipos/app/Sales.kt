@@ -87,14 +87,32 @@ data class Sale(
     val fieldTimes: Map<String, Long> = emptyMap(),
     /** PINs that let restricted actions through on this bill: a price change, a void… */
     val approvals: List<ApprovalNote> = emptyList(),
+    /** A table bill: the order it settles, the table's name as printed, and the rounds it covers. */
+    val orderId: String? = null,
+    val table: String? = null,
+    val roundIds: List<String> = emptyList(),
+    /** Guests at the table, when someone counted them. */
+    val covers: Int? = null,
+    /** On table bills only (outlet setting); 0 for none, or after the guest asked for it off. */
+    val serviceChargePct: Double = 0.0,
+    /** When a table bill was paid; null until then, and on counter bills. */
+    val settledAt: Long? = null,
 ) {
     /** What the slip and the screen call it: "A12", or "12" without a letter. */
     val label: String get() = letter + token
     val mine: Boolean get() = phone.isEmpty()
     /** Before the discount. */
     val subtotal: Double get() = lines.sumOf { it.amount }
-    /** What the customer pays. */
-    val total: Double get() = maxOf(0.0, subtotal - discount)
+    /** The shared arithmetic (paise, tax, service charge), exactly as the server works it out. */
+    val totals: Protocol.Totals get() = Protocol.billTotals(
+        lines.map { Protocol.Line(Protocol.paise(it.price), it.qty, it.taxRate ?: 0.0) }, Protocol.paise(discount), true, serviceChargePct,
+    )
+    /** What the customer pays (a service charge included). */
+    val total: Double get() = if (serviceChargePct > 0) Protocol.rupees(totals.total) else maxOf(0.0, subtotal - discount)
+    /** The service charge with its tax, as the bill prints it (prices include tax). */
+    val serviceCharge: Double get() = if (serviceChargePct > 0) Protocol.rupees(totals.serviceChargeShown(true)) else 0.0
+    /** A table bill printed but not paid yet: in the day's sales, in no payment. */
+    val unsettled: Boolean get() = payment.isEmpty()
     /** On the customer's account rather than paid at the counter; see [Ledger]. */
     val onCredit: Boolean get() = payment == CREDIT
     val itemCount: Int get() = lines.sumOf { it.qty }
@@ -150,6 +168,18 @@ object Sales {
     fun setPayment(c: Context, uid: String, payment: String, approval: Manager.Approval? = null) = edit(c, uid, "payment", approval) {
         it.copy(payment = payment, customerId = if (payment == CREDIT) it.customerId ?: Customers.ensure(c, it.customer) else it.customerId)
     }
+
+    /**
+     * A printed table bill is paid: how (credit goes on [customer]'s dues), and when. The first
+     * payment of a bill is part of the sale, so it needs no PIN; changing it later is [setPayment].
+     */
+    fun settle(c: Context, uid: String, payment: String, customer: String = "") = edit(c, uid, "payment", null) {
+        val name = customer.trim().ifBlank { it.customer }
+        it.copy(payment = payment, customer = name, customerId = if (payment == CREDIT) Customers.ensure(c, name) else null, settledAt = Cloud.now(c))
+    }
+
+    /** Takes the service charge off a table bill (the guest's choice), or puts it back, before it is settled. */
+    fun setServiceCharge(c: Context, uid: String, pct: Double) = edit(c, uid, "content", null) { it.copy(serviceChargePct = pct) }
 
     /** One edit: [group]'s time moves to now, and so does content's when an approval is added to the bill. */
     private fun edit(c: Context, uid: String, group: String, approval: Manager.Approval?, change: (Sale) -> Sale) {

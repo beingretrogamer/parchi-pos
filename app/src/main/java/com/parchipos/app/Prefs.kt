@@ -193,5 +193,5 @@ object Prefs {
     fun feedCursor(c: Context): String = p(c).getString("feedCursor", "")!!
     fun setFeedCursor(c: Context, cursor: String) = p(c).edit().putString("feedCursor", cursor).apply()
 
-    private fun p(c: Context) = c.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+    internal fun p(c: Context) = c.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 }

@@ -91,6 +91,7 @@ object Escpos {
         b.line(row2("Bill ${sale.id}", sale.customer, w))
         // From the first Parchi Cloud connection on: the GST-style invoice number.
         sale.invoiceNo?.let { b.line("Invoice $it") }
+        sale.table?.let { b.line(row2("Table $it", sale.covers?.let { n -> "$n guests" } ?: "", w)) }
         b.line("-".repeat(w))
 
         // Columns: item (variable) | qty (3) | rate (6) | amount (8)
@@ -114,14 +115,20 @@ object Escpos {
         }
         b.line("-".repeat(w))
 
+        if (sale.discount > 0 || sale.serviceCharge > 0) b.line(row2("Subtotal", Sales.money(sale.subtotal), w))
         if (sale.discount > 0) {
-            b.line(row2("Subtotal", Sales.money(sale.subtotal), w))
             b.line(row2("Discount" + if (sale.discountReason.isNotBlank()) " (${sale.discountReason})" else "", "-" + Sales.money(sale.discount), w))
         }
+        // With its GST, so Subtotal + Service charge = Total (prices include tax).
+        if (sale.serviceCharge > 0) b.line(row2("Service charge ${plain(sale.serviceChargePct)}%", Sales.money(sale.serviceCharge), w))
         b.bold(true).size(0x01)
             .line(row2("TOTAL (${sale.itemCount} items)", "Rs." + Sales.money(sale.total), w))
             .size(0).bold(false)
-        val paid = if (sale.onCredit) "On credit - to pay" else "Paid: ${sale.payment}"
+        val paid = when {
+            sale.unsettled -> "To pay"
+            sale.onCredit -> "On credit - to pay"
+            else -> "Paid: ${sale.payment}"
+        }
         b.line(row2(paid, if (shop.gstin.isNotBlank()) "Incl. of GST" else "", w))
         if (sale.voided) b.bold(true).line("*** VOID: ${sale.voidReason} ***").bold(false)
 
@@ -164,6 +171,37 @@ object Escpos {
 
         b.line("-".repeat(w))
         b.line(row2("${sale.itemCount} items", "Bill ${sale.id}", w))
+        b.cut()
+        return b.bytes()
+    }
+
+    /**
+     * A table's round for the kitchen, like [parchi]: the table large, then each item. A round
+     * that takes items back prints as CANCEL, with the reason, so the kitchen stops making them.
+     */
+    fun round(shop: Prefs.Shop, table: String, round: Tables.Round, no: Int, covers: Int?): ByteArray {
+        val w = cols(shop)
+        val big = shop.width
+        val b = start(shop)
+        val cancel = round.lines.all { it.qty < 0 }
+
+        b.center().bold(true).size(0x11).line(if (cancel) "CANCEL $table" else "TABLE $table").size(0)
+        b.line((if (cancel) "TAKE BACK" else "ROUND $no") + "  " + time(round.time) + if (round.origin.isNotBlank()) "  ${round.origin}" else "").bold(false)
+        b.left().line("-".repeat(w))
+        b.font(false).bold(true)
+        for (l in round.lines) {
+            val qty = "${Math.abs(l.qty)} x "
+            val names = wrap(l.name, big - qty.length)
+            b.size(0x01)
+            b.line(qty + names.first())
+            names.drop(1).forEach { b.line(" ".repeat(qty.length) + it) }
+            b.size(0)
+            if (l.note.isNotBlank()) wrap(">> ${l.note}", big - 4).forEach { b.line("    $it") }
+            if (l.qty < 0 && l.reason.isNotBlank()) wrap("!! ${l.reason}", big - 4).forEach { b.line("    $it") }
+        }
+        b.size(0).bold(false).font(shop.small)
+        b.line("-".repeat(w))
+        b.line(row2("${round.lines.sumOf { Math.abs(it.qty) }} items", covers?.let { "$it guests" } ?: "", w))
         b.cut()
         return b.bytes()
     }

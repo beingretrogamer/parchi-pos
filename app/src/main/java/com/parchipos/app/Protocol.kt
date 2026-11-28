@@ -15,7 +15,7 @@ import org.json.JSONObject
  */
 object Protocol {
 
-    const val VERSION = 1
+    const val VERSION = 2
 
     /**
      * A bill is edited in independent ways (voided on one phone, moved to UPI
@@ -25,13 +25,21 @@ object Protocol {
     val FIELD_GROUPS: Map<String, Map<String, List<String>>> = mapOf(
         "bill" to linkedMapOf(
             "void" to listOf("voided", "voidReason"),
-            "payment" to listOf("payment", "customerId", "customer"),
+            // A table bill is printed first and settled when the guest pays: settling is a payment edit.
+            "payment" to listOf("payment", "customerId", "customer", "settledAt"),
             "date" to listOf("day", "time", "billNo", "token", "invoiceNo"),
-            "content" to listOf("lines", "discount", "discountReason", "approvals", "letter", "deviceId", "origin"),
+            "content" to listOf("lines", "discount", "discountReason", "approvals", "letter", "deviceId", "origin",
+                "orderId", "table", "roundIds", "covers", "serviceChargePct"),
         ),
         "receipt" to linkedMapOf(
             "void" to listOf("voided", "voidReason"),
             "content" to listOf("time", "day", "deviceId", "customerId", "customer", "amount", "discount", "mode", "note"),
+        ),
+        // A running order is moved on one device while it is billed on another, and its guests counted on a third.
+        "order" to linkedMapOf(
+            "place" to listOf("tableId", "mergedInto"),
+            "status" to listOf("status", "billIds", "cancelReason", "approvals"),
+            "info" to listOf("covers", "note"),
         ),
     )
 
@@ -159,18 +167,31 @@ object Protocol {
 
     data class Line(val price: Long, val qty: Int, val taxRate: Double = 0.0)
     data class LineFigures(val net: Long, val tax: Long)
-    data class Totals(val subtotal: Long, val discount: Long, val tax: Long, val total: Long, val lines: List<LineFigures>)
+    /**
+     * [serviceCharge] is before its own tax, [serviceChargeTax] that tax (in [tax] too). With tax-inclusive
+     * prices a bill shows the two together, which is exactly the percentage of the food's price.
+     */
+    data class Totals(
+        val subtotal: Long, val discount: Long, val tax: Long, val total: Long, val lines: List<LineFigures>,
+        val serviceCharge: Long = 0, val serviceChargeTax: Long = 0,
+    ) {
+        /** The service charge as a bill prints it (see the class note). */
+        fun serviceChargeShown(pricesIncludeTax: Boolean): Long = serviceCharge + if (pricesIncludeTax) serviceChargeTax else 0
+    }
 
     /**
      * The bill's figures. The discount is spread over lines in proportion to
      * their amounts, the remainder on the last line so it adds up to the
      * paisa; tax is worked out per line at its own rate.
      */
-    fun billTotals(lines: List<Line>, discountRaw: Long, pricesIncludeTax: Boolean = true): Totals {
+    fun billTotals(lines: List<Line>, discountRaw: Long, pricesIncludeTax: Boolean = true, serviceChargePct: Double = 0.0): Totals {
         val amounts = lines.map { it.price * it.qty }
         val subtotal = amounts.sum()
         val discount = discountRaw.coerceIn(0, subtotal)
+        val pct = serviceChargePct.coerceIn(0.0, 100.0)
         var given = 0L
+        var serviceCharge = 0L
+        var foodTax = 0L
         val out = amounts.mapIndexed { i, amount ->
             val share = if (i == amounts.size - 1) discount - given
                 else if (subtotal != 0L) Math.round(discount.toDouble() * amount / subtotal) else 0L
@@ -182,10 +203,16 @@ object Protocol {
                 pricesIncludeTax -> Math.round(net * r / (100 + r))
                 else -> Math.round(net * r / 100)
             }
-            LineFigures(net, tax)
+            foodTax += tax
+            // A service charge is a percentage of the line's value before tax, taxed at the line's rate.
+            val sc = if (pct > 0) Math.round((if (pricesIncludeTax) net - tax else net) * pct / 100) else 0L
+            val scTax = if (r <= 0) 0L else Math.round(sc * r / 100)
+            serviceCharge += sc
+            LineFigures(net, tax + scTax)
         }
         val tax = out.sumOf { it.tax }
-        return Totals(subtotal, discount, tax, subtotal - discount + if (pricesIncludeTax) 0 else tax, out)
+        val scTax = tax - foodTax
+        return Totals(subtotal, discount, tax, subtotal - discount + (if (pricesIncludeTax) 0 else foodTax) + serviceCharge + scTax, out, serviceCharge, scTax)
     }
 
     /** ₹45.50 → 4550. Every price on a phone was typed in rupees and paise, so this is exact. */

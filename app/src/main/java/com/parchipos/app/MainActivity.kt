@@ -95,7 +95,7 @@ class MainActivity : ParchiActivity() {
         }
     }
     /** A sync brought something: the menu may have changed (the cart never does). */
-    private val cloudChanged: () -> Unit = { if (!isFinishing) { reloadMenu(); renderCloudDot() } }
+    private val cloudChanged: () -> Unit = { if (!isFinishing) { reloadMenu(); renderCloudDot(); btnTables.visibility = if (!inTable && Tables.enabled(this)) View.VISIBLE else View.GONE } }
 
     private var menu: List<MenuItem> = emptyList()
     /** Insertion-ordered, so the bill lists items in the order they were rung up. */
@@ -113,6 +113,19 @@ class MainActivity : ParchiActivity() {
      * Keeping it across bills once put a following day's sales on the old date.
      */
     private var billDay: Long? = null
+
+    /**
+     * Table mode (dine-in, plan §15): the cart is the next round for this table, sent to the
+     * kitchen rather than charged. [tableOrderId] is null until the table's first round.
+     */
+    private var tableId: String? = null
+    private var tableName = ""
+    private var tableOrderId: String? = null
+    private var tableCovers: Int? = null
+    private val inTable: Boolean get() = tableId != null
+    private lateinit var tableBar: View
+    private lateinit var tableTitle: TextView
+    private lateinit var btnTables: Button
 
     private val ui = Handler(Looper.getMainLooper())
     /** Catches up bills rung up while offline, for as long as the till is open. */
@@ -156,6 +169,14 @@ class MainActivity : ParchiActivity() {
         managerChip.contentDescription = getString(R.string.manager_locked_desc)
         managerChip.setOnClickListener { managerTapped() }
         btnBillDay.setOnClickListener { if (billDay != null) setBillDay(null) else pickBillDay() }
+        tableBar = findViewById(R.id.tableBar)
+        tableTitle = findViewById(R.id.tableTitle)
+        btnTables = findViewById(R.id.btnTables)
+        btnTables.setOnClickListener { openTables() }
+        findViewById<Button>(R.id.btnBackToTables).setOnClickListener { leaveTable() }
+        findViewById<Button>(R.id.btnOrder).setOnClickListener {
+            tableOrderId?.let { startActivity(Intent(this, OrderActivity::class.java).putExtra(OrderActivity.EXTRA_ORDER, it)) }
+        }
 
         findViewById<Button>(R.id.btnSales).setOnClickListener { open(SalesActivity::class.java) }
         findViewById<Button>(R.id.btnMenu).setOnClickListener { open(MenuActivity::class.java) }
@@ -184,6 +205,63 @@ class MainActivity : ParchiActivity() {
         findViewById<Button>(R.id.btnSave).setOnClickListener { charge(printSlips = false) }
         renderPayment()
         intent.takeIf { it.hasExtra(EXTRA_BILL_DAY) }?.let { chooseBillDay(it.getLongExtra(EXTRA_BILL_DAY, 0)) }
+        readTable(intent)
+    }
+
+    /** The tables grid (or an order screen) sends a table here to ring up its next round. */
+    private fun readTable(i: Intent) {
+        val id = i.getStringExtra(EXTRA_TABLE) ?: return
+        if (inTable && id != tableId && cart.isNotEmpty()) clearCart()
+        tableId = id
+        tableName = i.getStringExtra(EXTRA_TABLE_NAME) ?: ""
+        tableOrderId = i.getStringExtra(EXTRA_ORDER)
+        tableCovers = i.getIntExtra(EXTRA_COVERS, 0).takeIf { it > 0 }
+        renderTableMode()
+    }
+
+    private fun openTables() {
+        Prefs.p(this).edit().putString(PREF_MODE, MODE_TABLES).apply()
+        startActivity(Intent(this, TablesActivity::class.java))
+    }
+
+    /** Back to the grid; an unsent round asks first. */
+    private fun leaveTable() {
+        if (cart.isNotEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.discard_round_title)
+                .setMessage(getString(R.string.discard_round_body, cart.values.sumOf { it.qty }))
+                .setPositiveButton(R.string.btn_discard) { _, _ -> clearCart(); exitTable() }
+                .setNegativeButton(R.string.btn_keep_adding, null)
+                .show()
+        } else exitTable()
+    }
+
+    private fun exitTable() {
+        tableId = null
+        tableOrderId = null
+        tableCovers = null
+        renderTableMode()
+        openTables()
+    }
+
+    @Deprecated("Back leaves a table's round for the tables grid")
+    override fun onBackPressed() {
+        if (inTable) leaveTable() else @Suppress("DEPRECATION") super.onBackPressed()
+    }
+
+    /** Table mode hides what a round doesn't have: payment, customer, discount, another day. */
+    private fun renderTableMode() {
+        tableBar.visibility = if (inTable) View.VISIBLE else View.GONE
+        val counterOnly = listOf<View>(customer, payCash.parent as View, btnDiscount, btnBillDay, findViewById(R.id.btnSave))
+        counterOnly.forEach { it.visibility = if (inTable) View.GONE else View.VISIBLE }
+        findViewById<Button>(R.id.btnOrder).visibility = if (inTable && tableOrderId != null) View.VISIBLE else View.GONE
+        if (inTable) {
+            val sent = tableOrderId?.let { id -> Tables.rounds(this, setOf(id)).count { r -> r.lines.any { it.qty > 0 } } } ?: 0
+            tableTitle.text = if (tableOrderId == null) getString(R.string.table_new_order, tableName) else getString(R.string.table_adding, tableName, sent + 1)
+            discountLine.visibility = View.GONE
+        }
+        btnTables.visibility = if (!inTable && Tables.enabled(this)) View.VISIBLE else View.GONE
+        renderCart()
     }
 
     /** An order in progress keeps its date; an empty till goes back to today. */
@@ -202,7 +280,9 @@ class MainActivity : ParchiActivity() {
     /** Sales' "add a missed bill" lands here with the day it was showing. */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         if (intent.hasExtra(EXTRA_BILL_DAY)) chooseBillDay(intent.getLongExtra(EXTRA_BILL_DAY, 0))
+        readTable(intent)
     }
 
     /** Menu and shop name may have changed on another screen. */
@@ -216,6 +296,11 @@ class MainActivity : ParchiActivity() {
         syncTick.run()
         ui.removeCallbacks(chipTick)
         chipTick.run()
+        renderTableMode()
+        // A device that was on Tables opens on Tables (Back or Counter there switches it off).
+        if (!inTable && Prefs.p(this).getString(PREF_MODE, MODE_COUNTER) == MODE_TABLES && Tables.enabled(this)) {
+            startActivity(Intent(this, TablesActivity::class.java))
+        }
     }
 
     /** Shown once someone here has a PIN: a padlock, or who is unlocked and for how long. */
@@ -530,6 +615,11 @@ class MainActivity : ParchiActivity() {
             discountPct?.let { " (" + Sales.money(it).removeSuffix(".00") + "%)" } ?: "", discountReason)
         btnDiscount.text = if (off > 0) getString(R.string.btn_discount_on, rs(off)) else getString(R.string.btn_discount)
         cartTitle.text = getString(R.string.cart_title, count)
+        if (inTable) {
+            btnCharge.text = getString(R.string.btn_send_kitchen, count)
+            discountLine.visibility = View.GONE
+            return
+        }
         val day = billDay
         btnCharge.text = if (day == null) getString(R.string.btn_charge, count, rs(total))
             else getString(R.string.btn_charge_past, count, rs(total), shortDay(day))
@@ -749,6 +839,7 @@ class MainActivity : ParchiActivity() {
     /** `printSlips = false` records the sale and skips both slips; Sales can print it later. */
     private fun charge(printSlips: Boolean) {
         if (cart.isEmpty()) return
+        if (inTable) { sendRound(); return }
         val name = customer.text.toString().trim()
         if (payment == CREDIT && name.isEmpty()) {
             // A credit bill with no name could never be collected.
@@ -835,6 +926,30 @@ class MainActivity : ParchiActivity() {
         print(sale)
     }
 
+    /**
+     * The cart goes to the kitchen as the table's next round (the table's first opens its
+     * order), its slip prints on the kitchen printer, and the device goes back to the tables.
+     */
+    private fun sendRound() {
+        val id = tableId ?: return
+        val table = Tables.tables(this, includeOff = true).find { it.id == id } ?: return
+        val lines = cart.values.map { Tables.Line(it.name, it.price, it.qty, it.note, it.itemId, it.variant, it.itemId == null, it.tax) }
+        val (order, round) = Store.tx(this) {
+            val o = tableOrderId?.let { Tables.order(this, it) }?.takeIf { it.status != Tables.CANCELLED } ?: Tables.open(this, table, tableCovers)
+            o to Tables.send(this, o.id, lines, approvals.toList())
+        }
+        tableOrderId = order.id
+        val no = Tables.rounds(this, setOf(order.id)).count { r -> r.lines.any { it.qty > 0 } }
+        val name = tableName.ifBlank { table.name }
+        Printer.round(this, name, round, no, order.covers) { err ->
+            if (err != null && !isFinishing) Toast.makeText(this, getString(R.string.kitchen_print_failed, name, err), Toast.LENGTH_LONG).show()
+        }
+        Toast.makeText(this, getString(R.string.sent_to_kitchen, name, no), Toast.LENGTH_SHORT).show()
+        clearCart()
+        Sync.kick(this)
+        exitTable()
+    }
+
     /** Bill and parchi go to their own printers; Retry reprints only what failed. */
     private fun print(sale: Sale, bill: Boolean = true, parchi: Boolean = Prefs.shop(this).printParchi) {
         Printer.sale(this, sale, bill, parchi) { failed ->
@@ -906,6 +1021,23 @@ class MainActivity : ParchiActivity() {
         private const val SYNC_EVERY_MS = 5 * 60 * 1000L
         /** Midnight of a past day to bill, from Sales' "add a missed bill". */
         const val EXTRA_BILL_DAY = "billDay"
+        /** Table mode: the table, its name, its running order (if any) and guests counted when seating. */
+        const val EXTRA_TABLE = "table"
+        const val EXTRA_TABLE_NAME = "tableName"
+        const val EXTRA_ORDER = "order"
+        const val EXTRA_COVERS = "covers"
+        private const val PREF_MODE = "till.mode"
+        const val MODE_TABLES = "tables"
+        const val MODE_COUNTER = "counter"
+
+        /** Opens the till for [table]'s next round (the order may not exist yet). */
+        fun forTable(c: android.content.Context, table: Tables.Table, orderId: String?, covers: Int?): Intent =
+            Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(EXTRA_TABLE, table.id).putExtra(EXTRA_TABLE_NAME, table.name)
+                .putExtra(EXTRA_ORDER, orderId).putExtra(EXTRA_COVERS, covers ?: 0)
+
+        /** The device stays on the counter from now on (Back or Counter on the tables grid). */
+        fun counterMode(c: android.content.Context) = Prefs.p(c).edit().putString(PREF_MODE, MODE_COUNTER).apply()
 
         /** Whole rupees without the ".00" — the screen is read at a glance. */
         fun rs(n: Double): String =

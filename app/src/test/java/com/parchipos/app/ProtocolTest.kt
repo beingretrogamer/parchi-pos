@@ -59,13 +59,15 @@ class ProtocolTest {
             val c = cases.getJSONObject(i)
             val arr = c.getJSONArray("lines")
             val lines = (0 until arr.length()).map { arr.getJSONObject(it).let { l -> Protocol.Line(l.getLong("price"), l.getInt("qty"), l.optDouble("taxRate", 0.0)) } }
-            val t = Protocol.billTotals(lines, c.getLong("discount"), c.getBoolean("pricesIncludeTax"))
+            val t = Protocol.billTotals(lines, c.getLong("discount"), c.getBoolean("pricesIncludeTax"), c.optDouble("serviceChargePct", 0.0))
             val e = c.getJSONObject("expected")
             val name = c.getString("name")
             assertEquals(name, e.getLong("subtotal"), t.subtotal)
             assertEquals(name, e.getLong("discount"), t.discount)
             assertEquals(name, e.getLong("tax"), t.tax)
             assertEquals(name, e.getLong("total"), t.total)
+            assertEquals(name, e.getLong("serviceCharge"), t.serviceCharge)
+            assertEquals(name, e.getLong("serviceChargeTax"), t.serviceChargeTax)
             val el = e.getJSONArray("lines")
             assertEquals(name, (0 until el.length()).map { el.getJSONObject(it).let { l -> Protocol.LineFigures(l.getLong("net"), l.getLong("tax")) } }, t.lines)
         }

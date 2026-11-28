@@ -21,6 +21,10 @@ object Rules {
     const val VOID_RECEIPT = "voidReceipt"
     const val SOLD_OUT = "soldOut"
     const val STAFF_SEES_TOTALS = "staffSeesTotals"
+    /** Taking back an item already sent to the kitchen (tables). */
+    const val CANCEL_SENT = "cancelSent"
+    /** Reopening a printed table bill: it is voided and a new one printed later. */
+    const val REOPEN_BILL = "reopenBill"
 
     private const val MANAGER = "manager"
     private const val ALLOW = "allow"
@@ -28,6 +32,7 @@ object Rules {
     private val DEFAULTS = mapOf(
         OPEN_ITEMS to ALLOW, PRICE_EDIT to MANAGER, DISCOUNT to MANAGER, BACK_DATE to MANAGER,
         VOID_BILL to ALLOW, CHANGE_PAYMENT to ALLOW, VOID_RECEIPT to MANAGER, SOLD_OUT to ALLOW, STAFF_SEES_TOTALS to ALLOW,
+        CANCEL_SENT to MANAGER, REOPEN_BILL to MANAGER,
     )
     private const val DEFAULT_DISCOUNT_MAX_PCT = 10.0
     private const val DEFAULT_IDLE_MINUTES = 10
