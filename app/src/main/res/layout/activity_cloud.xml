@@ -178,6 +178,17 @@
                 android:lineSpacingExtra="4dp"
                 android:textColor="@color/danger"
                 android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/btnRetryRejected"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/btn_secondary"
+                android:text="@string/btn_retry_rejected"
+                android:textAllCaps="false"
+                android:textColor="@color/ink"
+                android:textSize="14sp" />
         </LinearLayout>
 
         <Button

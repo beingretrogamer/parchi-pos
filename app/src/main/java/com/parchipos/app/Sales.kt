@@ -115,12 +115,26 @@ object Sales {
         Store.saveBill(c, sale.copy(fieldTimes = sale.fieldTimes.ifEmpty { Bills.allGroups(sale.updatedAt) }))
     }
 
-    fun all(c: Context): List<Sale> = Store.bills(c)
+    fun all(c: Context): List<Sale> = shown(c, null, null)
 
-    fun forDay(c: Context, day: String): List<Sale> = Store.bills(c, "day = ?", arrayOf(day))
+    fun forDay(c: Context, day: String): List<Sale> = shown(c, "day = ?", arrayOf(day))
 
     /** Credit bills, voided ones included, for the dues screens. */
-    fun onCredit(c: Context): List<Sale> = Store.bills(c, "payment = ?", arrayOf(CREDIT))
+    fun onCredit(c: Context): List<Sale> = shown(c, "payment = ?", arrayOf(CREDIT))
+
+    /**
+     * The bills the screens show. A device in an account shows the account's
+     * sales, the same on every device of the outlet: a copy of another phone's
+     * bill that came through the IceCreamOS feed shows only once the account
+     * has that bill too (it then has a sequence number), which it does when
+     * that phone connects and uploads its own. The copy stays on this device,
+     * and shows again if the device leaves the account.
+     */
+    private fun shown(c: Context, where: String?, args: Array<String>?): List<Sale> {
+        if (!Cloud.connected(c)) return Store.bills(c, where, args)
+        val hide = "NOT (src = '${Src.FEED}' AND seq = 0)"
+        return Store.bills(c, if (where == null) hide else "($where) AND $hide", args)
+    }
 
     // Edits find a bill by uid: bill ids from before token letters repeat
     // across phones, and any phone may edit any phone's bill.
