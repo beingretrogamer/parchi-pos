@@ -22,7 +22,7 @@ import kotlin.concurrent.thread
  * going, and make the first connection's choices (this phone's menu and bill
  * header) with a manager's PIN.
  */
-class CloudActivity : Activity() {
+class CloudActivity : ParchiActivity() {
 
     private val ui = Handler(Looper.getMainLooper())
     private val refresh: () -> Unit = { if (!isFinishing) render() }
@@ -150,49 +150,12 @@ class CloudActivity : Activity() {
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)).apply { topMargin = dp(8) })
     }
 
-    /**
-     * Asks for an owner's or manager's PIN and checks it offline against the
-     * staff records (slow by design, so off the main thread), then runs [then].
-     */
+    /** An owner's or manager's PIN, checked offline (with the pad's lockout), then [then]. */
     private fun askPin(then: (CloudSetup.Staff, String) -> Unit) {
-        if (CloudSetup.staff(this).isEmpty()) {
-            AlertDialog.Builder(this).setMessage(R.string.pin_none).setPositiveButton(android.R.string.ok, null).show()
-            return
-        }
-        val input = EditText(this).apply {
-            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
-            hint = getString(R.string.hint_pin)
-            textSize = 22f
-            setPadding(dp(16), dp(12), dp(16), dp(12))
-        }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(R.string.title_pin)
-            .setView(input)
-            .setPositiveButton(android.R.string.ok, null)
-            .setNegativeButton(android.R.string.cancel, null)
-            .create()
-        dialog.show()
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-            val pin = input.text.toString()
-            input.isEnabled = false
-            dialog.setTitle(R.string.pin_checking)
-            thread {
-                val hit = CloudSetup.checkPin(this, pin)
-                ui.post {
-                    if (isFinishing) return@post
-                    input.isEnabled = true
-                    dialog.setTitle(R.string.title_pin)
-                    if (hit == null) {
-                        input.setText("")
-                        input.error = getString(R.string.pin_wrong)
-                        return@post
-                    }
-                    dialog.dismiss()
-                    then(hit.first, hit.second)
-                    render()
-                    SyncEngine.kick(this)
-                }
-            }
+        Manager.askPin(this, getString(R.string.title_pin), null, Manager.MANAGERS) { staff, key ->
+            then(staff, key)
+            render()
+            SyncEngine.kick(this)
         }
     }
 
@@ -244,14 +207,29 @@ class CloudActivity : Activity() {
             .show()
     }
 
+    /**
+     * Disconnecting stops this device sharing the shop's bills, so it takes
+     * the owner's PIN (a manager's when no owner has one). A removed device,
+     * or one where nobody has a PIN yet, only asks to confirm.
+     */
     private fun confirmDisconnect() {
+        val staff = CloudSetup.staff(this)
+        val roles = if (staff.any { it.role == "owner" }) Manager.OWNERS else Manager.MANAGERS
+        if (Cloud.status(this).state == Cloud.State.REMOVED || staff.isEmpty()) disconnectNow()
+        else Manager.askPin(this, getString(if (roles == Manager.OWNERS) R.string.title_owner_pin else R.string.title_pin), getString(R.string.disconnect_needs_owner), roles) { _, _ -> disconnectNow() }
+    }
+
+    private fun disconnectNow() {
         val me = Cloud.me(this) ?: return
         val waiting = Store.outboxCount(this)
-        val msg = getString(R.string.disconnect_confirm, me.accountName) + if (waiting > 0) "\n\n" + getString(R.string.disconnect_waiting, waiting) else ""
+        val l = CloudSetup.leaving(this)
+        val msg = getString(R.string.disconnect_confirm, me.accountName, l.bills, l.payments, l.otherBills, l.otherPayments) +
+            if (waiting > 0) "\n\n" + getString(R.string.disconnect_waiting, waiting) else ""
         AlertDialog.Builder(this)
             .setMessage(msg)
             .setPositiveButton(R.string.btn_disconnect) { _, _ ->
                 CloudSetup.disconnect(this)
+                Manager.lock()
                 toast(getString(R.string.disconnected))
                 render()
             }

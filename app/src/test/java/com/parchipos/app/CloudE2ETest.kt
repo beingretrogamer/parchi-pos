@@ -177,4 +177,71 @@ class CloudE2ETest {
         assertTrue(Store.bill(c, "e2e-own-2-$now")!!.voided)
         assertFalse(Cloud.status(c).state == Cloud.State.ERROR)
     }
+
+    @Test fun ownersEditOnTheDeviceWithTheirPinAndTheStaffPinOpensTheLock() {
+        val admin = Web(server!!)
+        admin.ok("POST", "/api/auth/login", JSONObject().put("login", System.getenv("PARCHI_E2E_ADMIN")).put("password", System.getenv("PARCHI_E2E_PASSWORD")))
+        val ownerLogin = "e2e-pin-$now"
+        val acc = admin.ok("POST", "/api/admin/accounts", JSONObject().put("name", "E2E PIN $now").put("maxDevices", 2)
+            .put("outlet", JSONObject().put("name", "Main")).put("owner", JSONObject().put("login", ownerLogin).put("name", "Mudit Owner").put("password", "owner-pass-123"))
+            .put("rules", JSONObject().put("soldOut", "manager").put("appLock", true)))
+        val accountId = acc.getJSONObject("account").getString("id")
+        val outletId = acc.getString("outletId")
+        val owner = Web(server)
+        val ownerId = owner.ok("POST", "/api/auth/login", JSONObject().put("login", ownerLogin).put("password", "owner-pass-123")).getJSONObject("user").getString("id")
+        owner.ok("POST", "/api/me/pin", JSONObject().put("password", "owner-pass-123").put("pin", "2468"))
+        owner.ok("PUT", "/api/accounts/$accountId/outlets/$outletId/lock-pin", JSONObject().put("pin", "2580"))
+        owner.ok("POST", "/api/accounts/$accountId/changes", JSONObject().put("changes", JSONArray()
+            .put(JSONObject().put("kind", "category").put("id", "cat_hot").put("data", JSONObject().put("name", "Hot").put("sort", 1)))
+            .put(JSONObject().put("kind", "menuItem").put("id", "itm_tea").put("data", JSONObject().put("categoryId", "cat_hot").put("name", "Tea").put("price", 1000).put("sort", 1).put("variants", JSONArray())))))
+        val code = owner.ok("POST", "/api/accounts/$accountId/codes", JSONObject().put("outletId", outletId)).getString("code")
+
+        CloudSetup.connect(c, server, code, "Counter")
+        assertEquals("", SyncEngine.runOnce(c))
+        assertTrue("the app lock rule arrived", AppLock.locked(c))
+        assertTrue("the staff PIN opens it", Manager.check(c, "2580", Manager.MANAGERS, withStaffPin = true) is Manager.Check.Ok)
+
+        // The owner unlocks and changes a price on the device: the server takes it as theirs.
+        val ok = Manager.check(c, "2468", Manager.MANAGERS) as Manager.Check.Ok
+        Manager.begin(ok.staff, ok.key)
+        val tea = Menu.all(c).first { it.id == "itm_tea" }
+        Menu.upsert(c, tea.copy(price = 12.0))
+        assertEquals("", SyncEngine.runOnce(c))
+        assertEquals(0, Store.outboxCount(c))
+        val item = owner.ok("GET", "/api/accounts/$accountId/records?kind=menuItem").getJSONArray("records").getJSONObject(0)
+        assertEquals(1200, item.getJSONObject("data").getInt("price"))
+        assertEquals(ownerId, item.getString("byUser"))
+
+        // Sold out needs a manager here: unsigned, it is refused and undone; approved, it goes.
+        Manager.lock()
+        Menu.setSoldOut(c, "itm_tea", true, null)
+        assertEquals("", SyncEngine.runOnce(c))
+        assertFalse("undone", Menu.all(c).first { it.id == "itm_tea" }.soldOut)
+        assertTrue(Store.rejected(c).any { it.contains("needs a manager PIN") })
+        Menu.setSoldOut(c, "itm_tea", true, Manager.Approval(Rules.SOLD_OUT, ok.staff, ok.key, Cloud.now(c)))
+        assertEquals("", SyncEngine.runOnce(c))
+        val status = owner.ok("GET", "/api/accounts/$accountId/records?kind=itemStatus").getJSONArray("records").getJSONObject(0)
+        assertTrue(status.getJSONObject("data").getBoolean("soldOut"))
+
+        // The bill header, edited on the device: the staff PIN stays as the owner set it.
+        val outlet = Store.record(c, "outlet", outletId)!!
+        val header = JSONObject().put("shopName", "Scoops & Sips").put("footer", "Come again")
+        Store.saveRecord(c, CloudSetup.sign(c, outlet.copy(data = JSONObject(outlet.data.toString()).put("header", header), dirty = true), ok.staff, ok.key))
+        assertEquals("", SyncEngine.runOnce(c))
+        val info = owner.ok("GET", "/api/accounts/$accountId").getJSONArray("outlets").getJSONObject(0)
+        assertEquals("Come again", info.getJSONObject("header").getString("footer"))
+        assertTrue(info.getBoolean("hasLockPin"))
+
+        // A bill with an approval carries it to the server, proof and all.
+        val uid = "e2e-appr-$now"
+        val approval = Manager.Approval(Rules.PRICE_EDIT, ok.staff, ok.key, Cloud.now(c))
+        Sales.record(c, Sale(id = Sales.billId(now, "A", 1), token = 1, time = now, letter = Cloud.letter(c), lines = listOf(SaleLine("Tea", 15.0, 1, itemId = "itm_tea")),
+            payment = "CASH", customer = "", uid = uid, updatedAt = Cloud.now(c), deviceId = Cloud.me(c)!!.deviceId, approvals = listOf(ApprovalNote.from(approval.toJson(uid)))))
+        assertEquals("", SyncEngine.runOnce(c))
+        val bill = owner.ok("GET", "/api/accounts/$accountId/bills?from=$today&to=$today").getJSONArray("bills").getJSONObject(0)
+        val a = bill.getJSONObject("data").getJSONArray("approvals").getJSONObject(0)
+        assertEquals("priceEdit", a.getString("action"))
+        assertEquals(ownerId, a.getString("userId"))
+        assertEquals(Pin.proof(ok.key, "approval:priceEdit", uid, a.getLong("at")), a.getString("proof"))
+    }
 }

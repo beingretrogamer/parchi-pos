@@ -28,6 +28,8 @@ data class Receipt(
     val deviceId: String? = null,
     /** The customer record it was paid against (Parchi Cloud); null for name-only. */
     val customerId: String? = null,
+    /** PINs that let a void or restore through (till rule voidReceipt). */
+    val approvals: List<ApprovalNote> = emptyList(),
 ) {
     val credited: Double get() = amount + discount
     val day: String get() = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(time))
@@ -70,7 +72,7 @@ object Ledger {
 
     fun receipts(c: Context): List<Receipt> = Store.receipts(c)
 
-    fun setReceiptVoided(c: Context, uid: String, voided: Boolean, reason: String) {
+    fun setReceiptVoided(c: Context, uid: String, voided: Boolean, reason: String, approval: Manager.Approval? = null) {
         Store.tx(c) {
             val r = Store.receipt(c, uid) ?: return@tx
             // After the state it changes, whatever this phone's clock says (see Sales.editTime).
@@ -78,6 +80,7 @@ object Ledger {
             Store.saveReceipt(c, r.copy(
                 voided = voided, voidReason = if (voided) reason else "", updatedAt = now,
                 fieldTimes = r.fieldTimes.ifEmpty { Receipts.allGroups(r.updatedAt) } + ("void" to now),
+                approvals = if (approval != null) r.approvals + ApprovalNote.from(approval.toJson(r.uid)) else r.approvals,
             ))
         }
     }

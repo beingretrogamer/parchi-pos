@@ -42,6 +42,13 @@
             </intent-filter>
         </activity>
 
+        <!-- The app lock: shown over whichever screen was open; Back leaves the app. -->
+        <activity
+            android:name=".LockActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize|stateVisible" />
+
         <activity
             android:name=".MenuActivity"
             android:exported="false"

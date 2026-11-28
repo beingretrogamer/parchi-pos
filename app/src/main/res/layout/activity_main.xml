@@ -33,6 +33,21 @@
             android:textSize="20sp"
             android:textStyle="bold" />
 
+        <!-- Manager: a padlock when locked, the name and time left when a PIN has unlocked it. -->
+        <TextView
+            android:id="@+id/managerChip"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:gravity="center"
+            android:minWidth="36dp"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:maxWidth="132dp"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:textSize="14sp"
+            android:visibility="gone" />
+
         <!-- Parchi Cloud: a dot that says live, waiting or offline; tap for details. -->
         <TextView
             android:id="@+id/cloudDot"

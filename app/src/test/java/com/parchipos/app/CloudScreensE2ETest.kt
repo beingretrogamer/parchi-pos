@@ -97,24 +97,43 @@ class CloudScreensE2ETest {
         val buttons = cloud.findViewById<android.widget.LinearLayout>(R.id.choiceList)
         (0 until buttons.childCount).map { buttons.getChildAt(it) }.filterIsInstance<Button>().first { it.text == cloud.getString(R.string.btn_upload_menu) }.performClick()
         val dialog = ShadowAlertDialog.getLatestAlertDialog() as AlertDialog
-        val pinField = shadowOf(dialog).view as EditText
+        val pad = shadowOf(dialog).view as android.widget.LinearLayout
+        val pinField = (0 until pad.childCount).map { pad.getChildAt(it) }.filterIsInstance<EditText>().single()
+        val status = (0 until pad.childCount).map { pad.getChildAt(it) }.filterIsInstance<TextView>().last { it !is EditText }
         pinField.setText("0000")
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
-        settle { pinField.error != null }
-        assertEquals(cloud.getString(R.string.pin_wrong), pinField.error?.toString())
+        settle { status.text.startsWith("Wrong PIN") }
+        assertEquals(cloud.getString(R.string.pin_wrong_left, Manager.MAX_TRIES - 1), status.text.toString())
         pinField.setText("1357")
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
         settle { Store.get(app, "cloud.menuChoice") == null && Store.outboxCount(app) == 0 && cloud.findViewById<View>(R.id.choiceCard).visibility == View.GONE }
         assertEquals(0, Store.outboxCount(app))
         assertEquals(Cloud.State.LIVE, Cloud.status(app).state)
 
-        // The till shows the cloud dot; the menu screen is read-only; Settings hides IceCreamOS.
+        // The till shows the cloud dot and a padlock; the menu is read-only until unlocked; Settings hides IceCreamOS.
+        Manager.lock()
         val till = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         assertEquals(View.VISIBLE, till.findViewById<View>(R.id.cloudDot).visibility)
+        assertEquals(View.VISIBLE, till.findViewById<View>(R.id.managerChip).visibility)
+        assertEquals(till.getString(R.string.manager_chip_locked), till.findViewById<TextView>(R.id.managerChip).text.toString())
         val menu = Robolectric.buildActivity(MenuActivity::class.java).setup().get()
         assertEquals(View.GONE, menu.findViewById<View>(R.id.btnAdd).visibility)
+        val staff = CloudSetup.staff(app).single()
+        Manager.begin(staff, Pin.key("1357", staff.salt))
+        val unlocked = Robolectric.buildActivity(MenuActivity::class.java).setup().get()
+        assertEquals("unlocked, the editor is back", View.VISIBLE, unlocked.findViewById<View>(R.id.btnAdd).visibility)
+        assertEquals("but never the built-in board, which would replace the account's menu", View.GONE, unlocked.findViewById<View>(R.id.btnReset).visibility)
+        val chip = Robolectric.buildActivity(MainActivity::class.java).setup().get().findViewById<TextView>(R.id.managerChip).text.toString()
+        assertTrue(chip, chip.startsWith("🔓 Owner"))
+        Manager.lock()
         val settings = Robolectric.buildActivity(SettingsActivity::class.java).setup().get()
         assertEquals(View.GONE, settings.findViewById<View>(R.id.iceCreamCard).visibility)
         assertTrue(settings.findViewById<TextView>(R.id.cloudEntry).text.contains("Screens $stamp"))
+
+        // The app lock: once the owner switches it on, a screen coming up shows the lock first.
+        Store.saveRecord(app, Store.Rec("rules", "rules", JSONObject().put("appLock", true), seq = Long.MAX_VALUE / 2))
+        AppLock.reset()
+        val locked = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        assertEquals(LockActivity::class.java.name, shadowOf(locked).nextStartedActivity?.component?.className)
     }
 }

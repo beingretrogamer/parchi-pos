@@ -147,13 +147,18 @@ saved and printed first, and goes up when the device is online.
 
 What happens on connect:
 
-- **Uploads.** This device's own bills and all its dues payments go up.
-  Bills it saw from other devices (through IceCreamOS) stay where they are;
-  each device uploads its own.
+- **Uploads.** Only what was rung up on this device goes up: its own bills
+  and its dues payments, stamped with its new device id.
+  - Bills it saw from other devices (through IceCreamOS) stay where they are;
+    each device uploads its own.
+  - Anything it got from an earlier account never goes. That includes the
+    bills of a device whose slot it took over with **Replace**: they show as
+    this device's while it is in that account, but they came from the account.
+  - The server refuses a new bill or payment stamped with another device's id.
 - **Its letter.** It keeps its old letter if it's free.
 - **Menu.**
   - If the account already has a menu, it replaces the device's. The old one
-    is kept in `menu.backup.json`.
+    is kept in a backup file (`menu.backup-<time>.json`, one per connect).
   - If the account has none yet, the Parchi Cloud screen offers to upload
     the device's menu. That needs an owner's or manager's PIN.
 - **Bill header.** It works the same way as the menu.
@@ -175,17 +180,60 @@ From then on:
 - **Invoice numbers.** New bills get one, like `A/26-27/000123`, printed
   under the token. Each device has its own series per financial year, so
   devices never clash, even offline.
-- **Menu and bill header** come from the account and are edited in the
-  portal. Managers will be able to edit them on the device with their PIN in
-  the next update.
+- **Menu and bill header** come from the account. They are edited in the
+  portal, or on the device after an owner or manager unlocks it (below).
 - **Clock.** Times follow Parchi Cloud's clock, so a device with a wrong
   clock still files bills on the right day.
 - **History.** A new device downloads the last 90 days plus every credit bill
   and payment. Opening an older day in Sales fetches it.
 
+**Owners and managers on the device.** Each sets a PIN in the portal under
+**My account**. It is checked on the device, offline.
+
+- **Unlock.** Tap the padlock in the till's header and type the PIN. The
+  header then shows who is unlocked and the time left. While unlocked, the
+  Menu screen and the bill header in Settings can be edited, and a custom
+  item can be saved to the menu. It locks again after 5 minutes without a
+  tap, when Parchi is left, or with **Lock now**.
+- **Till rules.** The owner decides in the portal what needs a PIN at the
+  counter: custom items, price changes, discounts over a limit, bills on
+  another day, voids, payment changes, voiding a dues payment, marking items
+  sold out, and seeing the day's totals. When one needs a PIN, the device asks
+  at that moment. The approval is kept on the bill and shown in the portal.
+- **Wrong PINs.** After 5 wrong PINs in a row, the pad locks for a minute.
+- **Sold out.** Long-press an item on the till, or use **Sold out** on the
+  Menu screen. It greys out on every device of the outlet until it's back.
+- **Edits made offline** go up when the device is back online. If the
+  person's PIN changed meanwhile, the account refuses the edit, and the device
+  goes back to the account's version. The Parchi Cloud screen says what
+  happened.
+
+**App lock** (optional; the owner switches it on in the portal under Till
+rules). The device asks for a PIN when Parchi is opened, and after it sits
+unused for the set minutes.
+
+- **Who can open it.** The outlet's staff PIN opens it, and so does any
+  owner's or manager's own PIN.
+- **Forgotten PIN.** The owner can change the staff PIN, or switch the lock
+  off, in the portal. The device picks that up at its next sync.
+- **Lost device.** Remove it in the portal; its data stays behind the lock.
+- Devices that aren't connected never lock.
+
 **Disconnect this device**, at the bottom of the Parchi Cloud screen, turns it
-back into a till of its own and keeps everything on it. Remove it in the
-portal as well, to free its place on the licence.
+back into a till of its own. It needs the owner's PIN, and the confirmation
+says what stays and what goes:
+
+- **Stays:** the bills and payments rung up on this device, any IceCreamOS feed
+  bills it held before connecting, and the menu as it is now.
+- **Comes off:** what came down from the account. That means other devices'
+  bills and payments, customers, staff, till rules, the outlet's settings and
+  sold-out marks. It is all still in the account.
+
+Remove the device in the portal as well, to free its place on the licence.
+
+**Restore a saved menu** (Menu screen, on a device that isn't connected) brings
+back the menu it had before Parchi Cloud, or the one saved when it joined an
+account, or the board menu.
 
 ## Cloud sync (IceCreamOS)
 

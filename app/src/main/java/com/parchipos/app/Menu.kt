@@ -25,6 +25,8 @@ data class MenuItem(
     val categoryId: String? = null,
     /** GST percent rung up with it: its own rate, else its category's. Read-only here; set in the portal. */
     val tax: Double? = null,
+    /** Greyed out on every device of the outlet until it is back (Parchi Cloud). */
+    val soldOut: Boolean = false,
 )
 
 /**
@@ -39,8 +41,12 @@ object Menu {
 
     fun all(c: Context): List<MenuItem> {
         val cats = Store.records(c, "category").associateBy { it.id }
+        val outlet = Cloud.me(c)?.outletId
+        val soldOut = if (outlet == null) emptySet() else Store.records(c, "itemStatus")
+            .filter { it.outletId == outlet && it.data.optBoolean("soldOut") }
+            .mapTo(HashSet()) { it.data.optString("itemId") }
         return Store.records(c, "menuItem")
-            .map { fromRecord(it, cats) }
+            .map { fromRecord(it, cats).let { m -> if (m.id in soldOut) m.copy(soldOut = true) else m } }
             .sortedWith(compareBy<MenuItem>({ cats[it.categoryId]?.data?.optDouble("sort")?.takeUnless(Double::isNaN) ?: Double.MAX_VALUE }, { it.sort }, { it.name.lowercase(Locale.ROOT) }))
     }
 
@@ -62,10 +68,18 @@ object Menu {
     }
 
     /** Swaps in the menu from the boards, for a fresh start. */
-    fun resetToDefault(c: Context) {
+    fun resetToDefault(c: Context) = replaceAll(c, parseLines(DEFAULT_MENU).items)
+
+    /**
+     * The whole menu becomes [items], in their order, under their categories
+     * in the order they first appear. Every current item and category is
+     * archived first. Past bills are not affected: their lines are copies.
+     */
+    fun replaceAll(c: Context, items: List<MenuItem>) {
         Store.tx(c) {
             all(c).forEach { remove(c, it.id) }
-            parseLines(DEFAULT_MENU).items.forEach { save(c, it) }
+            Store.records(c, "category").forEach { put(c, it.copy(deleted = true, updatedAt = maxOf(System.currentTimeMillis(), it.updatedAt + 1), dirty = true)) }
+            items.forEach { save(c, it.copy(id = it.id.ifBlank { newId() })) }
         }
     }
 
@@ -84,7 +98,7 @@ object Menu {
                 val sort = (i + 1).toDouble()
                 if (s.sort == sort) return@forEachIndexed
                 val rec = Store.record(c, "menuItem", s.id) ?: return@forEachIndexed
-                Store.saveRecord(c, rec.copy(data = JSONObject(rec.data.toString()).put("sort", sort), updatedAt = maxOf(now, rec.updatedAt + 1), dirty = true))
+                put(c, rec.copy(data = JSONObject(rec.data.toString()).put("sort", sort), updatedAt = maxOf(now, rec.updatedAt + 1), dirty = true))
             }
         }
     }
@@ -95,7 +109,32 @@ object Menu {
         return siblings.indexOf(item) + delta in siblings.indices
     }
 
+    /**
+     * Sold out, or back, on every device of this outlet. Signed by whoever
+     * approved it, when the till rules want a manager for it.
+     */
+    fun setSoldOut(c: Context, itemId: String, soldOut: Boolean, approval: Manager.Approval?) {
+        val outlet = Cloud.me(c)?.outletId ?: return
+        Store.tx(c) {
+            val id = "$outlet:$itemId"
+            val old = Store.record(c, "itemStatus", id)
+            val rec = Store.Rec(
+                kind = "itemStatus",
+                id = id,
+                data = JSONObject().put("itemId", itemId).put("soldOut", soldOut),
+                outletId = outlet,
+                updatedAt = maxOf(Cloud.now(c), (old?.updatedAt ?: 0) + 1),
+                seq = old?.seq ?: 0,
+                dirty = true,
+            )
+            Store.saveRecord(c, Manager.signedBy(c, rec, approval))
+        }
+    }
+
     fun newId(): String = UUID.randomUUID().toString()
+
+    /** Connected, the menu is the account's: an edit goes up signed by the owner or manager who unlocked. */
+    private fun put(c: Context, rec: Store.Rec) = Store.saveRecord(c, Manager.signed(c, rec))
 
     /** Category names match ignoring case and extra spaces. */
     fun catKey(name: String): String = name.trim().replace(Regex("\\s+"), " ").lowercase(Locale.ROOT)
@@ -114,7 +153,7 @@ object Menu {
             v.copy(id = v.id.ifEmpty { match?.optString("id") ?: Store.randomId("v") })
         }
         val now = System.currentTimeMillis()
-        Store.saveRecord(c, Store.Rec(
+        put(c, Store.Rec(
             kind = "menuItem",
             id = item.id,
             data = itemData(item.copy(sort = sort, variants = variants), catId, existing?.data),
@@ -125,7 +164,7 @@ object Menu {
 
     private fun remove(c: Context, id: String) {
         val rec = Store.record(c, "menuItem", id) ?: return
-        Store.saveRecord(c, rec.copy(deleted = true, updatedAt = maxOf(System.currentTimeMillis(), rec.updatedAt + 1), dirty = true))
+        put(c, rec.copy(deleted = true, updatedAt = maxOf(System.currentTimeMillis(), rec.updatedAt + 1), dirty = true))
     }
 
     /** The category with this name, created if there is none. Its id comes from the name, so two phones make the same one. */
@@ -135,7 +174,7 @@ object Menu {
         val id = Store.stableId("cat", key)
         val sort = (Store.records(c, "category").maxOfOrNull { it.data.optDouble("sort", 0.0) } ?: 0.0) + 1
         val old = Store.record(c, "category", id)
-        Store.saveRecord(c, Store.Rec(
+        put(c, Store.Rec(
             kind = "category",
             id = id,
             data = (old?.data?.let { JSONObject(it.toString()) } ?: JSONObject()).put("name", name).put("sort", sort),
@@ -305,4 +344,65 @@ object Menu {
         Water Bottle Small, 10, Drinks
         Cold Drink Can, 70, Drinks
     """.trimIndent()
+}
+
+/**
+ * Menus kept as files on the device: the one it had before the SQLite store
+ * (menu.json.imported) and one saved each time it connects to an account,
+ * whose menu then replaces it. A device of its own can restore any of them.
+ */
+object MenuBackups {
+    data class Saved(val file: java.io.File, val title: String, val savedAt: Long, val items: List<MenuItem>)
+
+    fun save(c: Context, items: List<MenuItem>, account: String) {
+        val now = System.currentTimeMillis()
+        val list = JSONArray()
+        items.forEach { m ->
+            list.put(JSONObject().put("id", m.id).put("name", m.name).put("price", m.price).put("category", m.category)
+                .put("variants", JSONArray().apply { m.variants.forEach { put(JSONObject().put("label", it.label).put("price", it.price)) } }))
+        }
+        var stamp = now
+        while (java.io.File(c.filesDir, "menu.backup-$stamp.json").exists()) stamp++ // two connects in one millisecond keep both
+        java.io.File(c.filesDir, "menu.backup-$stamp.json").writeText(JSONObject().put("savedAt", now).put("account", account).put("items", list).toString())
+    }
+
+    /**
+     * The menus worth offering: the one from before Parchi Cloud first (the
+     * device's original), then the rest newest first. Empty or unreadable
+     * files are left out, and so is any that is the menu already on the till.
+     */
+    fun list(c: Context): List<Saved> {
+        val files = c.filesDir.listFiles { f -> f.name == BEFORE_CLOUD || (f.name.startsWith("menu.backup") && f.name.endsWith(".json")) } ?: return emptyList()
+        val now = Menu.all(c).map { it.name to it.price }.toSet()
+        return files.mapNotNull { read(c, it) }
+            .filter { b -> b.items.isNotEmpty() && b.items.map { it.name to it.price }.toSet() != now }
+            .sortedWith(compareBy<Saved>({ it.file.name != BEFORE_CLOUD }, { -it.savedAt }))
+    }
+
+    private const val BEFORE_CLOUD = "menu.json.imported"
+
+    private fun read(c: Context, f: java.io.File): Saved? = try {
+        val text = f.readText().trim()
+        // menu.json and the first backups are a bare list; later backups say when and for which account.
+        val wrapped = if (text.startsWith("{")) JSONObject(text) else null
+        val arr = wrapped?.getJSONArray("items") ?: JSONArray(text)
+        val items = (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            val va = o.optJSONArray("variants") ?: JSONArray()
+            MenuItem(
+                o.optString("id", "").ifBlank { Menu.newId() }, o.getString("name"), o.optDouble("price", 0.0).takeUnless(Double::isNaN) ?: 0.0,
+                o.optString("category", ""),
+                (0 until va.length()).map { j -> va.getJSONObject(j).let { v -> Variant(v.getString("label"), v.getDouble("price")) } },
+            )
+        }
+        val account = wrapped?.optString("account")?.ifBlank { null }
+        val title = when {
+            f.name == BEFORE_CLOUD -> c.getString(R.string.backup_before_cloud)
+            account != null -> c.getString(R.string.backup_connecting_to, account)
+            else -> c.getString(R.string.backup_connecting)
+        }
+        Saved(f, title, wrapped?.optLong("savedAt", f.lastModified()) ?: f.lastModified(), items)
+    } catch (_: Exception) {
+        null
+    }
 }
