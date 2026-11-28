@@ -1,20 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Parchi Cloud's palette (parchi-cloud web/src/styles/tokens.css): receipt
+  paper, carbon ink and one blue stamp, so the till and the portal look like
+  one product. Keep the two in step; dark values are in values-night.
+-->
 <resources>
-    <color name="ic_launcher_background">#9A3412</color>
+    <color name="ic_launcher_background">#3446A8</color>
 
-    <color name="bg">#FBF7F2</color>
-    <color name="card">#FFFFFF</color>
-    <color name="ink">#1F1611</color>
-    <color name="ink_soft">#6B5D52</color>
-    <color name="ink_faint">#A8998C</color>
-    <color name="line">#EDE3D8</color>
+    <color name="bg">#F3EEE4</color>          <!-- paper -->
+    <color name="bg_2">#E9E2D4</color>        <!-- paper-2 -->
+    <color name="card">#FBF8F1</color>        <!-- sheet -->
+    <color name="field_fill">#FFFDF8</color>  <!-- sheet-2 -->
+    <color name="ink">#1D1914</color>
+    <color name="ink_soft">#4A4239</color>    <!-- ink-2 -->
+    <color name="ink_faint">#7B7164</color>   <!-- ink-3 -->
+    <color name="ink_hint">#A69C8E</color>    <!-- ink-4 -->
+    <color name="line">#DDD4C4</color>        <!-- rule -->
+    <color name="line_strong">#C9BDA9</color> <!-- rule-2 -->
 
-    <color name="accent">#C2410C</color>
-    <color name="accent_pressed">#9A3412</color>
-    <color name="accent_soft">#FFEDE0</color>
-    <color name="on_accent">#FFFFFF</color>
-    <color name="ok">#0E9F6E</color>
-    <color name="warn">#B54708</color>
-    <color name="danger">#D92D20</color>
-    <color name="field_fill">#FFFCF8</color>
+    <color name="accent">#3446A8</color>
+    <color name="accent_pressed">#273787</color>
+    <color name="accent_soft">#E2E4F3</color>
+    <color name="on_accent">#F6F5FF</color>
+
+    <color name="ok">#2C7650</color>          <!-- paid -->
+    <color name="ok_soft">#DBE9DA</color>
+    <color name="warn">#A86D12</color>        <!-- wait -->
+    <color name="warn_soft">#F3E4C4</color>
+    <color name="danger">#C0371F</color>      <!-- void -->
+    <color name="danger_soft">#F5DDD5</color>
 </resources>

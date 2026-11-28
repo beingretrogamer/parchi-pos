@@ -53,8 +53,8 @@ class TablesActivity : ParchiActivity() {
         }
         header.addView(TextView(this).apply {
             text = getString(R.string.title_tables)
-            textSize = 24f
-            setTypeface(typeface, Typeface.BOLD)
+            textSize = 26f
+            typeface = Fonts.display(this@TablesActivity)
             setTextColor(getColor(R.color.ink))
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         header.addView(topButton(getString(R.string.btn_sales)) { startActivity(Intent(this, SalesActivity::class.java)) })
@@ -117,12 +117,9 @@ class TablesActivity : ParchiActivity() {
         val areas = states.map { it.table.area }.distinct().sortedBy { if (it.isEmpty()) 1 else 0 }
         for (area in areas) {
             val inArea = states.filter { it.table.area == area }
-            if (areas.size > 1 || area.isNotEmpty()) list.addView(TextView(this).apply {
-                text = area.ifEmpty { "—" }.uppercase()
-                textSize = 12f
-                letterSpacing = 0.08f
-                setTextColor(getColor(R.color.ink_soft))
-                setPadding(0, dp(14), 0, dp(2))
+            if (areas.size > 1 || area.isNotEmpty()) list.addView(TextView(this, null, 0, R.style.GridHeading).apply {
+                text = area.ifEmpty { getString(R.string.other_items) }
+                setPadding(0, dp(16), 0, dp(2))
             })
             inArea.chunked(cols).forEach { rowStates ->
                 val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -135,38 +132,53 @@ class TablesActivity : ParchiActivity() {
         }
     }
 
+    /**
+     * A table at a glance: its name large, seats small, and one colour per state:
+     * free (quiet paper), ordering (blue, amount and minutes), bill printed
+     * (amber, the amount to settle).
+     */
     private fun tile(s: Tables.State): View {
         val busy = s.running.isNotEmpty()
+        val settling = !busy && s.toSettle.isNotEmpty()
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            minimumHeight = dp(92)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            setBackgroundResource(if (busy) R.drawable.tile_selected else R.drawable.tile)
+            minimumHeight = dp(96)
+            setPadding(dp(14), dp(10), dp(12), dp(12))
+            setBackgroundResource(when { busy -> R.drawable.tile_selected; settling -> R.drawable.tile_settle; else -> R.drawable.tile })
             if (!s.table.active && s.free) alpha = 0.45f
         }
-        body.addView(TextView(this).apply {
-            text = s.table.name + (s.table.seats?.let { "  ·  $it" } ?: "")
-            textSize = 18f
-            setTypeface(typeface, Typeface.BOLD)
+        val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        top.addView(TextView(this).apply {
+            text = s.table.name
+            textSize = 22f
+            typeface = Fonts.display(this@TablesActivity)
             setTextColor(getColor(R.color.ink))
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
-        })
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        s.table.seats?.let { seats ->
+            top.addView(TextView(this).apply {
+                text = resources.getQuantityString(R.plurals.n_seats, seats, seats)
+                textSize = 12f
+                setTextColor(getColor(R.color.ink_faint))
+            })
+        }
+        body.addView(top)
         val lines = ArrayList<Pair<String, Int>>()
         if (busy) {
             lines += getString(R.string.tile_running, MainActivity.rs(s.sent), s.since?.let { duration(Cloud.now(this) - it) } ?: "") to R.color.accent
             if (s.running.size > 1) lines += getString(R.string.tile_parties, s.running.size) to R.color.ink_soft
-            if (s.covers > 0) lines += getString(R.string.order_guests, s.covers) to R.color.ink_soft
+            if (s.covers > 0) lines += resources.getQuantityString(R.plurals.order_guests, s.covers, s.covers) to R.color.ink_soft
         }
         for (b in s.toSettle) lines += getString(R.string.tile_to_settle, MainActivity.rs(b.total)) to R.color.warn
-        if (s.notOnBill > 0) lines += getString(R.string.tile_not_on_bill, s.notOnBill) to R.color.danger
+        if (s.notOnBill > 0) lines += resources.getQuantityString(R.plurals.tile_not_on_bill, s.notOnBill, s.notOnBill) to R.color.danger
         if (lines.isEmpty()) lines += getString(if (s.table.active) R.string.tile_free else R.string.tile_off) to R.color.ink_faint
         for ((t, colour) in lines) body.addView(TextView(this).apply {
             text = t
-            textSize = 13f
+            textSize = 14f
             setTextColor(getColor(colour))
-            if (colour == R.color.accent || colour == R.color.warn) setTypeface(typeface, Typeface.BOLD)
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(3) })
+            if (colour == R.color.accent || colour == R.color.warn || colour == R.color.danger) setTypeface(typeface, Typeface.BOLD)
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
         body.setOnClickListener { tapped(s) }
         return body
     }
@@ -228,7 +240,11 @@ class TablesActivity : ParchiActivity() {
 
     private fun duration(ms: Long): String {
         val m = (ms / 60_000).coerceAtLeast(0).toInt()
-        return if (m < 60) getString(R.string.minutes_short, m) else getString(R.string.hours_short, m / 60, m % 60)
+        return when {
+            m < 1 -> getString(R.string.just_now)
+            m < 60 -> getString(R.string.minutes_short, m)
+            else -> getString(R.string.hours_short, m / 60, m % 60)
+        }
     }
 
     private fun time(t: Long) = java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date(t))

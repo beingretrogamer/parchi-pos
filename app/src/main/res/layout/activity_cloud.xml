@@ -43,7 +43,7 @@
                 android:inputType="textCapCharacters|textNoSuggestions|textVisiblePassword"
                 android:maxLength="9"
                 android:textSize="20sp"
-                android:typeface="monospace" />
+                android:fontFamily="@font/plex_mono" />
 
             <TextView style="@style/FieldLabel" android:text="@string/label_phone_name" />
             <EditText

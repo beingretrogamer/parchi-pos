@@ -204,8 +204,8 @@ class MenuActivity : ParchiActivity() {
                 asManager { Menu.addAll(this, parsed.items) }
                 render()
                 val added = parsed.items.size
-                val msg = if (parsed.skipped == 0) getString(R.string.paste_added, added)
-                    else getString(R.string.paste_added_skipped, added, parsed.skipped)
+                val msg = if (parsed.skipped == 0) resources.getQuantityString(R.plurals.paste_added, added, added)
+                    else resources.getQuantityString(R.plurals.paste_added_skipped, added, added, parsed.skipped)
                 Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -228,7 +228,7 @@ class MenuActivity : ParchiActivity() {
         }
         val when_ = SimpleDateFormat("d MMM, HH:mm", Locale.getDefault())
         val rows = saved.map { b ->
-            getString(R.string.backup_row, b.title, b.items.size, when_.format(Date(b.savedAt)),
+            resources.getQuantityString(R.plurals.backup_row, b.items.size, b.title, b.items.size, when_.format(Date(b.savedAt)),
                 b.items.take(4).joinToString(", ") { it.name } + if (b.items.size > 4) "…" else "")
         } + getString(R.string.backup_board)
         AlertDialog.Builder(this)

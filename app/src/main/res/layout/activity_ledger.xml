@@ -33,9 +33,9 @@
                 android:id="@+id/ledgerTotal"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:fontFamily="@font/fraunces_semibold"
                 android:textColor="@color/ink"
-                android:textSize="30sp"
-                android:textStyle="bold" />
+                android:textSize="40sp" />
 
             <TextView
                 android:id="@+id/ledgerSub"
@@ -60,7 +60,7 @@
                     style="@style/PayButton"
                     android:background="@drawable/btn_primary"
                     android:text="@string/btn_receive"
-                    android:textColor="#FFFFFF"
+                    android:textColor="@color/on_accent"
                     android:textStyle="bold" />
 
                 <Button

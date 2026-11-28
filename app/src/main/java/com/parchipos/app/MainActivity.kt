@@ -85,6 +85,15 @@ class MainActivity : ParchiActivity() {
     private lateinit var btnBillDay: TextView
     private lateinit var cloudDot: TextView
     private lateinit var managerChip: TextView
+    private lateinit var body: LinearLayout
+    private lateinit var menuPane: LinearLayout
+    private lateinit var gridScroll: ScrollView
+    private lateinit var stickyHead: TextView
+    private lateinit var cartEmpty: TextView
+    /** Tablet or open Fold: the order sits beside the menu instead of under it. */
+    private var wide = false
+    /** "All" with categories: each heading in the grid, for the one held at the top. */
+    private val headings = ArrayList<TextView>()
     /** PINs that let restricted actions through for the order being rung up; they go on its bill. */
     private val approvals = ArrayList<Manager.Approval>()
     /** Counts down an unlock on the chip. */
@@ -162,6 +171,12 @@ class MainActivity : ParchiActivity() {
         discountLine = findViewById(R.id.discountLine)
         btnCharge = findViewById(R.id.btnCharge)
         btnBillDay = findViewById(R.id.btnBillDay)
+        body = findViewById(R.id.body)
+        menuPane = findViewById(R.id.menuPane)
+        gridScroll = findViewById(R.id.gridScroll)
+        stickyHead = findViewById(R.id.stickyHead)
+        cartEmpty = findViewById(R.id.cartEmpty)
+        gridScroll.setOnScrollChangeListener { _, _, _, _, _ -> updateStickyHead() }
         cloudDot = findViewById(R.id.cloudDot)
         cloudDot.contentDescription = getString(R.string.cloud_dot_desc)
         cloudDot.setOnClickListener { open(CloudActivity::class.java) }
@@ -198,9 +213,9 @@ class MainActivity : ParchiActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) = renderGrid()
         })
-        titleView.typeface = Typeface.create("cursive", Typeface.BOLD)
-        titleView.textSize = 26f
-        titleView.setTextColor(getColor(R.color.accent))
+        titleView.typeface = Fonts.display(this)
+        titleView.setTextColor(getColor(R.color.ink))
+        layoutBody()
         btnCharge.setOnClickListener { charge(printSlips = true) }
         findViewById<Button>(R.id.btnSave).setOnClickListener { charge(printSlips = false) }
         renderPayment()
@@ -229,7 +244,7 @@ class MainActivity : ParchiActivity() {
         if (cart.isNotEmpty()) {
             AlertDialog.Builder(this)
                 .setTitle(R.string.discard_round_title)
-                .setMessage(getString(R.string.discard_round_body, cart.values.sumOf { it.qty }))
+                .setMessage(cart.values.sumOf { it.qty }.let { resources.getQuantityString(R.plurals.discard_round_body, it, it) })
                 .setPositiveButton(R.string.btn_discard) { _, _ -> clearCart(); exitTable() }
                 .setNegativeButton(R.string.btn_keep_adding, null)
                 .show()
@@ -311,12 +326,12 @@ class MainActivity : ParchiActivity() {
         if (name == null) {
             managerChip.text = getString(R.string.manager_chip_locked)
             managerChip.setTextColor(getColor(R.color.ink_soft))
-            managerChip.setTypeface(null, Typeface.NORMAL)
+            managerChip.typeface = Fonts.sans(this)
         } else {
             val left = (Manager.remainingMs() + 999) / 1000
             managerChip.text = getString(R.string.manager_chip_open, "${name.substringBefore(' ')} ${left / 60}:${(left % 60).toString().padStart(2, '0')}")
             managerChip.setTextColor(getColor(R.color.accent))
-            managerChip.setTypeface(null, Typeface.BOLD)
+            managerChip.typeface = Fonts.sans(this, bold = true)
         }
     }
 
@@ -344,7 +359,13 @@ class MainActivity : ParchiActivity() {
         if (!Cloud.connected(this)) { cloudDot.visibility = View.GONE; return }
         val st = Cloud.status(this)
         cloudDot.visibility = View.VISIBLE
-        cloudDot.text = if (st.outbox > 0) getString(R.string.dot_waiting, st.outbox) else getString(R.string.dot_live)
+        val state = when {
+            st.state == Cloud.State.OFFLINE && st.outbox > 0 -> getString(R.string.dot_offline_waiting, st.outbox)
+            st.state == Cloud.State.OFFLINE -> getString(R.string.dot_offline)
+            st.outbox > 0 -> getString(R.string.dot_waiting, st.outbox)
+            else -> getString(R.string.dot_live)
+        }
+        cloudDot.text = Cloud.me(this)?.name?.takeIf { it.isNotBlank() }?.let { getString(R.string.dot_with_device, state, it) } ?: state
         cloudDot.setTextColor(getColor(when (st.state) {
             Cloud.State.LIVE -> R.color.ok
             Cloud.State.WAITING, Cloud.State.OFFLINE -> R.color.warn
@@ -372,10 +393,46 @@ class MainActivity : ParchiActivity() {
         super.onConfigurationChanged(newConfig)
         // Folding or unfolding a Fold crosses the sw600dp line without
         // re-inflating, so the margins would stay sized for the other screen.
-        val pad = resources.getDimensionPixelSize(R.dimen.side_padding)
-        sidePadded.forEach { it.setPaddingRelative(pad, it.paddingTop, pad, it.paddingBottom) }
+        layoutBody()
         renderGrid()
         renderCart()
+    }
+
+    /**
+     * Phone: menu above, the order docked under it once it has something.
+     * From 600dp (a tablet, an open Fold): the order beside the menu, always
+     * there, so the menu never loses half its height to an open order.
+     */
+    private fun layoutBody() {
+        val w = resources.configuration.screenWidthDp
+        wide = w >= 600
+        body.orientation = if (wide) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+        menuPane.layoutParams = if (wide) LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+            else LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+        cartCard.layoutParams = if (wide) LinearLayout.LayoutParams(dp(cartWidthDp()), LinearLayout.LayoutParams.MATCH_PARENT)
+            else LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        cartCard.setBackgroundResource(if (wide) R.drawable.cart_panel_side else R.drawable.cart_panel)
+        // Side by side, the screen is already split; the wide-screen margins would squeeze both halves.
+        val pad = if (wide) dp(20) else resources.getDimensionPixelSize(R.dimen.side_padding)
+        sidePadded.forEach { it.setPaddingRelative(pad, it.paddingTop, pad, it.paddingBottom) }
+        titleView.textSize = if (wide) 22f else 18f
+        renderNav()
+    }
+
+    private fun cartWidthDp(): Int = (resources.configuration.screenWidthDp * 0.4f).toInt().coerceIn(300, 420)
+
+    /** Icons alone on a phone; icon and word where the header has room. */
+    private fun renderNav() {
+        val labelled = resources.configuration.screenWidthDp >= 600
+        listOf(R.id.btnTables to R.string.btn_tables, R.id.btnSales to R.string.btn_sales, R.id.btnLedger to R.string.btn_ledger,
+            R.id.btnMenu to R.string.btn_menu, R.id.btnSettings to R.string.title_settings).forEach { (id, label) ->
+            findViewById<Button>(id).apply {
+                text = if (labelled) getString(label) else ""
+                compoundDrawablePadding = if (labelled) dp(6) else 0
+                setPaddingRelative(dp(if (labelled) 12 else 10), 0, dp(if (labelled) 14 else 10), 0)
+                if (android.os.Build.VERSION.SDK_INT >= 26) tooltipText = getString(label)
+            }
+        }
     }
 
     private fun open(cls: Class<*>) = startActivity(Intent(this, cls))
@@ -416,13 +473,33 @@ class MainActivity : ParchiActivity() {
         val shown = if (q.isNotEmpty()) menu.filter { it.name.contains(q, ignoreCase = true) }
             else menu.filter { category == null || it.category == category }
 
-        // Roughly 110dp a tile: three across on a phone, more on a tablet.
-        val usableDp = resources.configuration.screenWidthDp - 2 * resources.getDimension(R.dimen.side_padding) / resources.displayMetrics.density
-        val cols = (usableDp / 110).toInt().coerceIn(2, 8)
+        // Roughly 110dp a tile: three across on a phone, more on a tablet (less the order beside it).
+        val padDp = if (wide) 20f else resources.getDimension(R.dimen.side_padding) / resources.displayMetrics.density
+        val usableDp = resources.configuration.screenWidthDp - (if (wide) cartWidthDp() else 0) - 2 * padDp
+        val cols = (usableDp / (if (wide) 112 else 110)).toInt().coerceIn(2, 8)
 
-        // The custom tile rides at the end of every view, so it is always one tap away.
-        val tiles: List<MenuItem?> = shown + listOf<MenuItem?>(null)
-        tiles.chunked(cols).forEach { rowItems ->
+        // "All" with more than one category: each category under its name, in menu order.
+        headings.clear()
+        val cats = shown.map { it.category }.distinct()
+        val grouped = q.isEmpty() && category == null && cats.count { it.isNotBlank() } > 1
+        val groups: List<Pair<String?, List<MenuItem?>>> =
+            if (grouped) cats.sortedBy { it.isBlank() }.map { c -> c to shown.filter { it.category == c } } + listOf<Pair<String?, List<MenuItem?>>>(null to listOf(null))
+            // The custom tile rides at the end of every view, so it is always one tap away.
+            else listOf(null to (shown + listOf<MenuItem?>(null)))
+        for ((cat, items) in groups) {
+            if (grouped && cat != null) {
+                val h = TextView(this, null, 0, R.style.GridHeading).apply { text = cat.ifBlank { getString(R.string.other_items) } }
+                headings += h
+                itemGrid.addView(h, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(if (headings.size == 1) 4 else 12) })
+            }
+            addTileRows(items, cols, q, firstTopMargin = if (grouped && cat != null) 0 else 8)
+        }
+        stickyHead.visibility = View.GONE
+        itemGrid.post { updateStickyHead() }
+    }
+
+    private fun addTileRows(tiles: List<MenuItem?>, cols: Int, q: String, firstTopMargin: Int) {
+        tiles.chunked(cols).forEachIndexed { index, rowItems ->
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             for (i in 0 until cols) {
                 // MATCH_PARENT in a wrap-content row: every tile takes the
@@ -439,9 +516,20 @@ class MainActivity : ParchiActivity() {
                 row.addView(view, lp)
             }
             itemGrid.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = dp(8)
+                topMargin = dp(if (index == 0) firstTopMargin else 8)
             })
         }
+    }
+
+    /** Holds the heading of the category scrolled into at the top of the grid. */
+    private fun updateStickyHead() {
+        val y = gridScroll.scrollY
+        val first = headings.firstOrNull()
+        // Before layout every heading sits at 0; only once scrolled past the first does one stick.
+        if (first == null || first.height == 0 || y <= first.top + itemGrid.top) { stickyHead.visibility = View.GONE; return }
+        val current = headings.lastOrNull { it.top + itemGrid.top <= y } ?: run { stickyHead.visibility = View.GONE; return }
+        stickyHead.text = current.text
+        stickyHead.visibility = View.VISIBLE
     }
 
     private fun tile(item: MenuItem): View {
@@ -542,20 +630,52 @@ class MainActivity : ParchiActivity() {
             addLine(item.id, item.id, item.name, item.price, null, item.tax)
             return
         }
-        val labels = item.variants.map { "${it.label}   ${rs(it.price)}" }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(item.name)
-            .setItems(labels) { _, i ->
-                val v = item.variants[i]
-                addLine(item.id + "|" + v.label, item.id, "${item.name} (${v.label})", v.price, v.label, item.tax)
+        // Big buttons, two across, the price under each size: picked with a thumb, mid-rush.
+        lateinit var dialog: AlertDialog
+        val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(4), dp(20), dp(4)) }
+        item.variants.chunked(2).forEach { pair ->
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            for (i in 0 until 2) {
+                val lp = LinearLayout.LayoutParams(0, dp(68), 1f).apply { if (i > 0) marginStart = dp(10) }
+                val v = pair.getOrNull(i)
+                if (v == null) { row.addView(View(this), lp); continue }
+                row.addView(LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    setBackgroundResource(R.drawable.tile)
+                    addView(TextView(this@MainActivity).apply { text = v.label; textSize = 16f; gravity = Gravity.CENTER; setTextColor(getColor(R.color.ink)); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+                    addView(TextView(this@MainActivity).apply { text = rs(v.price); textSize = 14f; gravity = Gravity.CENTER; setTypeface(typeface, Typeface.BOLD); setTextColor(getColor(R.color.accent)) })
+                    setOnClickListener {
+                        addLine(item.id + "|" + v.label, item.id, "${item.name} (${v.label})", v.price, v.label, item.tax)
+                        dialog.dismiss()
+                    }
+                }, lp)
             }
-            .show()
+            grid.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
+        }
+        dialog = AlertDialog.Builder(this)
+            .setTitle(item.name)
+            .setView(ScrollView(this).apply { addView(grid) })
+            .setNegativeButton(R.string.size_pick_cancel, null)
+            .create()
+        dialog.show()
     }
 
     private fun renderCart() {
         cartLines.removeAllViews()
-        cartCard.visibility = if (cart.isEmpty()) View.GONE else View.VISIBLE
-        if (cart.isEmpty()) return
+        // Beside the menu the order panel stays put, empty or not; under it, it appears with the first item.
+        cartCard.visibility = if (cart.isEmpty() && !wide) View.GONE else View.VISIBLE
+        val empty = cart.isEmpty()
+        cartEmpty.visibility = if (empty) View.VISIBLE else View.GONE
+        listOf<View>(cartScroll, customer, payCash.parent as View, btnCharge.parent as View, btnDiscount, btnBillDay, findViewById(R.id.btnClear))
+            .forEach { it.visibility = if (empty) View.GONE else View.VISIBLE }
+        if (empty) {
+            cartTitle.visibility = View.VISIBLE
+            cartTitle.text = getString(R.string.cart_empty_title)
+            discountLine.visibility = View.GONE
+            return
+        }
+        if (inTable) listOf<View>(customer, payCash.parent as View, btnDiscount, btnBillDay).forEach { it.visibility = View.GONE }
 
         for (line in cart.values) {
             val row = LinearLayout(this).apply {
@@ -582,29 +702,29 @@ class MainActivity : ParchiActivity() {
                 setTextColor(getColor(if (line.note.isBlank()) R.color.ink_faint else R.color.accent))
             })
             row.addView(label, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            row.addView(stepper("−") { step(line, -1) }, LinearLayout.LayoutParams(dp(40), dp(40)))
+            val stepDp = if (wide) 36 else 40
+            row.addView(stepper("−") { step(line, -1) }, LinearLayout.LayoutParams(dp(stepDp), dp(stepDp)))
             row.addView(TextView(this).apply {
                 text = line.qty.toString()
                 textSize = 16f
                 gravity = Gravity.CENTER
                 setTextColor(getColor(R.color.ink))
-            }, LinearLayout.LayoutParams(dp(36), LinearLayout.LayoutParams.WRAP_CONTENT))
-            row.addView(stepper("+") { step(line, 1) }, LinearLayout.LayoutParams(dp(40), dp(40)))
+            }, LinearLayout.LayoutParams(dp(if (wide) 30 else 36), LinearLayout.LayoutParams.WRAP_CONTENT))
+            row.addView(stepper("+") { step(line, 1) }, LinearLayout.LayoutParams(dp(stepDp), dp(stepDp)))
             row.addView(TextView(this).apply {
                 text = rs(line.price * line.qty)
                 textSize = 15f
                 gravity = Gravity.END
                 setTextColor(getColor(R.color.ink))
-            }, LinearLayout.LayoutParams(dp(76), LinearLayout.LayoutParams.WRAP_CONTENT))
+            }, LinearLayout.LayoutParams(dp(if (wide) 64 else 76), LinearLayout.LayoutParams.WRAP_CONTENT))
             cartLines.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(ROW_DP)))
         }
 
         // Grow with the cart up to a few rows, then scroll — past that the
-        // menu above would be squeezed to nothing on a phone.
+        // menu above would be squeezed to nothing on a phone. Beside the menu, the lines fill the panel.
         val maxRows = if (resources.configuration.screenHeightDp < 700) 3.5f else 5.5f
-        cartScroll.layoutParams = cartScroll.layoutParams.apply {
-            height = dp((minOf(cart.size.toFloat(), maxRows) * ROW_DP).toInt())
-        }
+        cartScroll.layoutParams = if (wide) LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+            else LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp((minOf(cart.size.toFloat(), maxRows) * ROW_DP).toInt()))
 
         val subtotal = cart.values.sumOf { it.price * it.qty }
         val off = discountAmount(subtotal)
@@ -614,9 +734,11 @@ class MainActivity : ParchiActivity() {
         discountLine.text = getString(R.string.discount_applied, rs(subtotal), rs(off),
             discountPct?.let { " (" + Sales.money(it).removeSuffix(".00") + "%)" } ?: "", discountReason)
         btnDiscount.text = if (off > 0) getString(R.string.btn_discount_on, rs(off)) else getString(R.string.btn_discount)
-        cartTitle.text = getString(R.string.cart_title, count)
+        // Beside the menu the panel is narrow, and the Print button already gives the count.
+        cartTitle.text = resources.getQuantityString(R.plurals.cart_title, count, count)
+        cartTitle.visibility = if (wide) View.INVISIBLE else View.VISIBLE
         if (inTable) {
-            btnCharge.text = getString(R.string.btn_send_kitchen, count)
+            btnCharge.text = resources.getQuantityString(R.plurals.btn_send_kitchen, count, count)
             discountLine.visibility = View.GONE
             return
         }
@@ -625,6 +747,7 @@ class MainActivity : ParchiActivity() {
             else getString(R.string.btn_charge_past, count, rs(total), shortDay(day))
         btnBillDay.text = if (day == null) getString(R.string.bill_day_today) else getString(R.string.bill_day_past, shortDay(day))
         btnBillDay.setTextColor(getColor(if (day == null) R.color.ink_soft else R.color.accent))
+        btnBillDay.compoundDrawableTintList = android.content.res.ColorStateList.valueOf(getColor(if (day == null) R.color.ink_soft else R.color.accent))
     }
 
     private fun stepper(label: String, onClick: () -> Unit) = Button(this).apply {
@@ -1039,8 +1162,18 @@ class MainActivity : ParchiActivity() {
         /** The device stays on the counter from now on (Back or Counter on the tables grid). */
         fun counterMode(c: android.content.Context) = Prefs.p(c).edit().putString(PREF_MODE, MODE_COUNTER).apply()
 
-        /** Whole rupees without the ".00" — the screen is read at a glance. */
-        fun rs(n: Double): String =
-            if (n == Math.floor(n)) "₹" + n.toLong() else "₹" + String.format(Locale.US, "%.2f", n)
+        /** Whole rupees without the ".00" — the screen is read at a glance — grouped the Indian way: ₹1,23,456. */
+        fun rs(n: Double): String {
+            val plain = if (n == Math.floor(n)) n.toLong().toString() else String.format(Locale.US, "%.2f", n)
+            val neg = plain.startsWith("-")
+            val digits = plain.removePrefix("-")
+            val whole = digits.substringBefore('.')
+            val frac = digits.substringAfter('.', "")
+            val grouped = if (whole.length <= 3) whole else {
+                val head = whole.dropLast(3)
+                head.reversed().chunked(2).joinToString(",").reversed() + "," + whole.takeLast(3)
+            }
+            return (if (neg) "-" else "") + "₹" + grouped + (if (frac.isNotEmpty()) ".$frac" else "")
+        }
     }
 }

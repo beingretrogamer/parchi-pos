@@ -139,11 +139,14 @@ class TablesScreensTest {
         val screen = Robolectric.buildActivity(OrderActivity::class.java, Intent(c, OrderActivity::class.java).putExtra(OrderActivity.EXTRA_ORDER, order.id)).setup().get()
         val screenRoot = screen.window.decorView
         tap(screenRoot, "Print bill")
-        idle { ShadowAlertDialog.getLatestAlertDialog()?.let { find(it.window!!.decorView) { v -> v is TextView && v.text.contains("TOTAL") } } != null }
+        idle { ShadowAlertDialog.getLatestAlertDialog()?.let { find(it.window!!.decorView) { v -> v.tag == "fig:total" } } != null }
         val preview = ShadowAlertDialog.getLatestAlertDialog() as AlertDialog
-        val figures = find(preview.window!!.decorView) { it is TextView && it.text.contains("TOTAL") } as TextView
-        assertTrue(figures.text.toString(), figures.text.contains("Service charge 5%   ₹25"))
-        assertTrue(figures.text.toString(), figures.text.contains("TOTAL   ₹525"))
+        // The preview reads like the slip: a label and its amount on each line.
+        fun figure(tag: String) = (find(preview.window!!.decorView) { it.tag == tag } as ViewGroup).let { r ->
+            (r.getChildAt(0) as TextView).text.toString() to (r.getChildAt(1) as TextView).text.toString()
+        }
+        assertEquals("Service charge 5%" to "₹25", figure("fig:service"))
+        assertEquals("Total" to "₹525", figure("fig:total"))
         preview.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
         idle()
         val bill = Tables.billsOf(c, setOf(order.id)).single()

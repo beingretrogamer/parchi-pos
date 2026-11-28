@@ -33,6 +33,8 @@ class OrderActivity : ParchiActivity() {
     private lateinit var body: LinearLayout
     private lateinit var actions: LinearLayout
     private var orderId = ""
+    /** The rounds as the kitchen got them: folded under "So far" until someone opens them. */
+    private var showRounds: Boolean? = null
     private val refresh: () -> Unit = { if (!isFinishing) render() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -90,11 +92,11 @@ class OrderActivity : ParchiActivity() {
 
         val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         top.addView(smallButton(getString(R.string.btn_back_tables)) { finish() })
-        top.addView(text(name, 26f, bold = true).apply { setPadding(dp(12), 0, 0, 0) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        top.addView(text(name, 30f).apply { typeface = Fonts.display(this@OrderActivity); setPadding(dp(12), 0, 0, 0) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         body.addView(top)
         val covers = p.orders.sumOf { it.covers ?: 0 }
         body.addView(text(getString(R.string.order_opened, time(p.root.openedAt), deviceName(p.root.deviceId)) + "   ·   " +
-            (if (covers > 0) getString(R.string.order_guests, covers) else getString(R.string.order_guests_none)), 14f, R.color.ink_soft).apply {
+            (if (covers > 0) resources.getQuantityString(R.plurals.order_guests, covers, covers) else getString(R.string.order_guests_none)), 14f, R.color.ink_soft).apply {
             setPadding(0, dp(4), 0, dp(8))
             setOnClickListener { if (p.root.open) askGuests(p) }
         })
@@ -106,35 +108,44 @@ class OrderActivity : ParchiActivity() {
         val unsettled = p.bills.filter { it.unsettled && !it.voided }
         for (b in unsettled) body.addView(banner(getString(R.string.order_billed, b.label, MainActivity.rs(b.total)), R.color.warn))
         val billed = p.root.status == Tables.BILLED
-        if (billed && p.unbilled.isNotEmpty()) body.addView(banner(getString(R.string.order_late_rounds, p.unbilled.size), R.color.danger))
+        if (billed && p.unbilled.isNotEmpty()) body.addView(banner(resources.getQuantityString(R.plurals.order_late_rounds, p.unbilled.size, p.unbilled.size), R.color.danger))
         if (p.root.status == Tables.CANCELLED) body.addView(banner(p.root.cancelReason, R.color.ink_soft))
 
-        // Every round, oldest first, each as the kitchen got it.
-        if (p.rounds.isEmpty()) body.addView(text(getString(R.string.order_empty), 15f, R.color.ink_soft).apply { setPadding(0, dp(16), 0, 0) })
-        var no = 0
-        for (r in p.rounds) {
-            val back = r.lines.all { it.qty < 0 }
-            if (!back) no++
-            val head = if (back) getString(R.string.round_takeback, time(r.time), r.origin) else getString(R.string.round_header, no, time(r.time), r.origin)
-            body.addView(text(head + if (!r.synced) "   " + getString(R.string.round_unsynced) else "", 12f, R.color.ink_soft).apply {
-                setPadding(0, dp(14), 0, dp(4)); letterSpacing = 0.04f
-            })
-            val onBill = r !in p.unbilled
-            r.lines.forEachIndexed { i, l ->
-                val row = lineRow(l, struck = l.qty < 0)
-                if (l.qty > 0 && p.root.open && !onBill) row.setOnClickListener { takeBack(p, name, r, i) }
-                body.addView(row)
-            }
-        }
-
-        // What the next bill comes to.
+        // What the next bill comes to, first: the question at a busy table.
         val (net, over) = Tables.net(p.unbilled)
         if (net.isNotEmpty()) {
-            body.addView(text(getString(R.string.order_so_far).uppercase(), 12f, R.color.ink_soft).apply { setPadding(0, dp(20), 0, dp(4)); letterSpacing = 0.08f })
+            body.addView(heading(getString(R.string.order_so_far)))
             net.forEach { body.addView(lineRow(it.line.copy(qty = it.qty), struck = false)) }
-            body.addView(text(getString(R.string.order_total, net.sumOf { it.qty }, MainActivity.rs(net.sumOf { it.amount })), 18f, bold = true).apply {
-                gravity = Gravity.END; setPadding(0, dp(8), 0, 0)
+            body.addView(text(net.sumOf { it.qty }.let { n -> resources.getQuantityString(R.plurals.order_total, n, n, MainActivity.rs(net.sumOf { it.amount })) }, 22f).apply {
+                typeface = Fonts.display(this@OrderActivity)
+                gravity = Gravity.END; setPadding(0, dp(10), 0, 0)
             })
+        }
+
+        // Then every round, oldest first, each as the kitchen got it; folded while there is a "So far".
+        if (p.rounds.isEmpty()) body.addView(text(getString(R.string.order_empty), 15f, R.color.ink_soft).apply { setPadding(0, dp(16), 0, 0) })
+        else {
+            val open = showRounds ?: net.isEmpty()
+            body.addView(text(getString(if (open) R.string.rounds_hide else R.string.rounds_show, p.rounds.size), 14f, R.color.accent, bold = true).apply {
+                setPadding(0, dp(22), 0, dp(6))
+                setOnClickListener { showRounds = !open; render() }
+            })
+            if (open) {
+                if (p.root.open && p.rounds.any { r -> r !in p.unbilled || r.lines.any { it.qty > 0 } }) body.addView(text(getString(R.string.rounds_takeback_hint), 13f, R.color.ink_faint))
+                var no = 0
+                for (r in p.rounds) {
+                    val back = r.lines.all { it.qty < 0 }
+                    if (!back) no++
+                    val head = if (back) getString(R.string.round_takeback, time(r.time), r.origin) else getString(R.string.round_header, no, time(r.time), r.origin)
+                    body.addView(heading(head + if (!r.synced) "   " + getString(R.string.round_unsynced) else ""))
+                    val onBill = r !in p.unbilled
+                    r.lines.forEachIndexed { i, l ->
+                        val row = lineRow(l, struck = l.qty < 0)
+                        if (l.qty > 0 && p.root.open && !onBill) row.setOnClickListener { takeBack(p, name, r, i) }
+                        body.addView(row)
+                    }
+                }
+            }
         }
         if (over) body.addView(text(getString(R.string.order_overcancelled), 13f, R.color.danger).apply { setPadding(0, dp(8), 0, 0) })
 
@@ -193,18 +204,26 @@ class OrderActivity : ParchiActivity() {
         val subtotal = net.sumOf { it.amount }
 
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(8), dp(24), 0) }
-        val figures = text("", 15f)
+        // Laid out like the slip: items and amounts in two columns, the total in the display face.
+        val figures = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        fun row(tag: String, left: String, right: String, size: Float = 15f, colour: Int = R.color.ink, display: Boolean = false, top: Int = 0) {
+            figures.addView(LinearLayout(this).apply {
+                this.tag = "fig:$tag"
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, dp(top + 3), 0, dp(3))
+                addView(text(left, size, colour).apply { if (display) typeface = Fonts.display(this@OrderActivity) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                addView(text(right, size, colour).apply { gravity = Gravity.END; if (display) typeface = Fonts.display(this@OrderActivity) })
+            })
+        }
         fun draw() {
             val sale = Sale(id = "", token = 0, time = 0, lines = net.map { it.line.toSaleLine(it.qty) }, payment = "", customer = "", discount = discount, serviceChargePct = pct)
-            figures.text = buildString {
-                net.forEach { append("${it.qty} × ${it.line.name}   ${MainActivity.rs(it.amount)}\n") }
-                append("\n")
-                if (discount > 0 || pct > 0) append("Subtotal   ${MainActivity.rs(subtotal)}\n")
-                if (discount > 0) append(getString(R.string.discount_line, MainActivity.rs(discount), reason) + "\n")
-                if (pct > 0) append(getString(R.string.bill_service_charge, label, Sales.money(pct).removeSuffix(".00")) + "   " + MainActivity.rs(sale.serviceCharge) + "\n")
-                else if (outletPct > 0) append(getString(R.string.bill_service_off) + "\n")
-                append("\nTOTAL   ${MainActivity.rs(sale.total)}")
-            }
+            figures.removeAllViews()
+            net.forEachIndexed { i, it -> row("line$i", "${it.qty} × ${it.line.name}", MainActivity.rs(it.amount)) }
+            if (discount > 0 || pct > 0) row("subtotal", getString(R.string.figure_subtotal), MainActivity.rs(subtotal), colour = R.color.ink_soft, top = 8)
+            if (discount > 0) row("discount", getString(R.string.figure_discount) + (if (reason.isNotBlank()) " · $reason" else ""), "−" + MainActivity.rs(discount), colour = R.color.ink_soft)
+            if (pct > 0) row("service", getString(R.string.bill_service_charge, label, Sales.money(pct).removeSuffix(".00")), MainActivity.rs(sale.serviceCharge), colour = R.color.ink_soft)
+            else if (outletPct > 0) row("service", getString(R.string.bill_service_off), "", colour = R.color.ink_faint)
+            row("total", getString(R.string.figure_total), MainActivity.rs(sale.total), size = 22f, display = true, top = 10)
         }
         draw()
         box.addView(figures)
@@ -392,6 +411,12 @@ class OrderActivity : ParchiActivity() {
         row.addView(text((if (l.qty < 0) "−" else "") + MainActivity.rs(Math.abs(l.price * l.qty)), 15f, if (struck) R.color.danger else R.color.ink))
         if (struck) for (i in 0 until row.childCount) (row.getChildAt(i) as TextView).paintFlags = Paint.STRIKE_THRU_TEXT_FLAG
         return row
+    }
+
+    /** A slip-style heading: small mono capitals. */
+    private fun heading(t: String) = TextView(this, null, 0, R.style.GridHeading).apply {
+        text = t
+        setPadding(0, dp(16), 0, dp(4))
     }
 
     private fun banner(t: String, colour: Int) = text(t, 14f, colour, bold = true).apply {

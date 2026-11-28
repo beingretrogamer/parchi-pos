@@ -122,10 +122,10 @@ object Escpos {
         // With its GST, so Subtotal + Service charge = Total (prices include tax).
         if (sale.serviceCharge > 0) b.line(row2("Service charge ${plain(sale.serviceChargePct)}%", Sales.money(sale.serviceCharge), w))
         b.bold(true).size(0x01)
-            .line(row2("TOTAL (${sale.itemCount} items)", "Rs." + Sales.money(sale.total), w))
+            .line(row2("TOTAL (${sale.itemCount} ${if (sale.itemCount == 1) "item" else "items"})", "Rs." + Sales.money(sale.total), w))
             .size(0).bold(false)
         val paid = when {
-            sale.unsettled -> "To pay"
+            sale.unsettled -> "To pay: Rs." + Sales.money(sale.total)
             sale.onCredit -> "On credit - to pay"
             else -> "Paid: ${sale.payment}"
         }

@@ -29,7 +29,8 @@ class SalesActivity : ParchiActivity() {
     private lateinit var dayLabel: TextView
     private lateinit var dayTotal: TextView
     private lateinit var daySplit: TextView
-    private lateinit var dayItems: TextView
+    private lateinit var dayItems: LinearLayout
+    private lateinit var payTiles: LinearLayout
     private lateinit var noBills: TextView
     private lateinit var billList: LinearLayout
 
@@ -46,6 +47,7 @@ class SalesActivity : ParchiActivity() {
         dayTotal = findViewById(R.id.dayTotal)
         daySplit = findViewById(R.id.daySplit)
         dayItems = findViewById(R.id.dayItems)
+        payTiles = findViewById(R.id.payTiles)
         noBills = findViewById(R.id.noBills)
         billList = findViewById(R.id.billList)
 
@@ -94,8 +96,9 @@ class SalesActivity : ParchiActivity() {
         val hideTotals = Rules.needsPin(this, Rules.STAFF_SEES_TOTALS) && Manager.current(this) == null
         dayTotal.setOnClickListener(if (hideTotals) View.OnClickListener { Manager.unlock(this) { load(kick = false) } } else null)
         dayTotal.isClickable = hideTotals
-        dayTotal.textSize = if (hideTotals) 15f else 28f
+        dayTotal.textSize = if (hideTotals) 15f else 40f
         daySplit.visibility = if (hideTotals) View.GONE else View.VISIBLE
+        payTiles.visibility = if (hideTotals || live.isEmpty()) View.GONE else View.VISIBLE
         findViewById<Button>(R.id.btnShare).visibility = if (hideTotals) View.GONE else View.VISIBLE
         dayTotal.text = if (hideTotals) getString(R.string.totals_hidden) else MainActivity.rs(live.sumOf { it.total })
         val cash = live.filter { it.payment == "CASH" }.sumOf { it.total }
@@ -108,19 +111,23 @@ class SalesActivity : ParchiActivity() {
         val collected = Ledger.receipts(this).filter { !it.voided && SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(it.time)) == dayKey }
         // Every phone's bills arrive through IceCreamOS; say how much was this one's.
         val others = live.filterNot { it.mine }
-        daySplit.text = getString(R.string.day_split, live.size, MainActivity.rs(cash), MainActivity.rs(upi)) +
-            (if (credit > 0) "\n" + getString(R.string.day_credit, MainActivity.rs(credit)) else "") +
-            live.filter { it.unsettled }.let { u -> if (u.isNotEmpty()) "\n" + getString(R.string.day_unsettled, MainActivity.rs(u.sumOf { it.total }), u.size) else "" } +
-            live.sumOf { it.serviceCharge }.let { sc -> if (sc > 0) "\n" + getString(R.string.day_service_charge, MainActivity.rs(sc)) else "" } +
-            (if (discount > 0) "\n" + getString(R.string.day_discount, MainActivity.rs(discount)) else "") +
-            (if (collected.isNotEmpty()) "\n" + getString(R.string.day_collected,
+        val unsettled = live.filter { it.unsettled }
+        renderPayTiles(listOf(
+            getString(R.string.pay_cash) to cash, getString(R.string.pay_upi) to upi,
+        ) + (if (credit > 0) listOf(getString(R.string.pay_credit) to credit) else emptyList())
+          + (if (unsettled.isNotEmpty()) listOf(getString(R.string.pay_tile_unsettled) to unsettled.sumOf { it.total }) else emptyList()))
+        daySplit.text = listOfNotNull(
+            resources.getQuantityString(R.plurals.n_bills, live.size, live.size) + if (voided > 0) "  ·  " + getString(R.string.day_voided, voided) else "",
+            live.sumOf { it.serviceCharge }.takeIf { it > 0 }?.let { getString(R.string.day_service_charge, MainActivity.rs(it)) },
+            discount.takeIf { it > 0 }?.let { getString(R.string.day_discount, MainActivity.rs(it)) },
+            if (collected.isNotEmpty()) getString(R.string.day_collected,
                 MainActivity.rs(collected.filter { it.mode == "CASH" }.sumOf { it.amount }),
-                MainActivity.rs(collected.filter { it.mode == "UPI" }.sumOf { it.amount })) else "") +
-            (if (others.isNotEmpty()) "\n" + getString(R.string.day_split_phones,
-                MainActivity.rs(live.filter { it.mine }.sumOf { it.total }), MainActivity.rs(others.sumOf { it.total })) else "") +
-            if (voided > 0) "\n" + getString(R.string.day_voided, voided) else ""
+                MainActivity.rs(collected.filter { it.mode == "UPI" }.sumOf { it.amount })) else null,
+            if (others.isNotEmpty()) getString(R.string.day_split_phones,
+                MainActivity.rs(live.filter { it.mine }.sumOf { it.total }), MainActivity.rs(others.sumOf { it.total })) else null,
+        ).joinToString("\n")
 
-        dayItems.text = Summary.itemTotals(sales).joinToString("\n") { (name, qty) -> "${qty.toString().padStart(4)}  $name" }
+        renderItems(live)
         dayItems.visibility = if (live.isEmpty() || hideTotals) View.GONE else View.VISIBLE
 
         noBills.visibility = if (sales.isEmpty()) View.VISIBLE else View.GONE
@@ -139,19 +146,21 @@ class SalesActivity : ParchiActivity() {
         }
         val time = SimpleDateFormat("HH:mm", Locale.US).format(Date(s.time))
         row.addView(text("#${s.label}", 16f, bold = true), LinearLayout.LayoutParams(dp(60), LinearLayout.LayoutParams.WRAP_CONTENT))
-        val desc = listOf(time, getString(R.string.n_items, s.itemCount),
-            s.table ?: "", if (s.unsettled) getString(R.string.not_settled) else if (s.onCredit) getString(R.string.pay_credit) else s.payment, s.phone, s.customer,
+        val desc = listOf(time, resources.getQuantityString(R.plurals.n_items, s.itemCount, s.itemCount),
+            s.table ?: "", s.phone, s.customer,
             if (s.discount > 0) getString(R.string.disc_short, MainActivity.rs(s.discount)) else "",
             if (s.voided) getString(R.string.voided_because, s.voidReason) else "",
             if (s.uid in unsynced) getString(R.string.not_synced) else "")
             .filter { it.isNotBlank() }.joinToString("  ·  ")
         row.addView(text(desc, 14f, colour = R.color.ink_soft), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(payPill(s), LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(8); marginEnd = dp(10) })
         row.addView(text(MainActivity.rs(s.total), 16f, bold = true).apply { gravity = Gravity.END },
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         if (s.voided) {
             for (i in 0 until row.childCount) {
                 (row.getChildAt(i) as TextView).apply {
+                    background = null
                     paintFlags = paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
                     setTextColor(getColor(R.color.ink_faint))
                 }
@@ -322,6 +331,56 @@ class SalesActivity : ParchiActivity() {
         maxLines = 2
         setTextColor(getColor(colour))
         if (bold) setTypeface(typeface, android.graphics.Typeface.BOLD)
+    }
+
+    /** One tile per way the money came in: the amount large, the way in small capitals. */
+    private fun renderPayTiles(tiles: List<Pair<String, Double>>) {
+        payTiles.removeAllViews()
+        tiles.forEachIndexed { i, (label, amount) ->
+            payTiles.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(10), dp(8), dp(10), dp(8))
+                setBackgroundResource(R.drawable.pill)
+                addView(TextView(this@SalesActivity, null, 0, R.style.GridHeading).apply { text = label; setPadding(0, 0, 0, dp(2)); maxLines = 1 })
+                addView(text(MainActivity.rs(amount), 16f, bold = true))
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { if (i > 0) marginStart = dp(8) })
+        }
+    }
+
+    /** What sold: each item with how many and what they came to, most sold first. */
+    private fun renderItems(live: List<Sale>) {
+        dayItems.removeAllViews()
+        dayItems.addView(TextView(this, null, 0, R.style.GridHeading).apply { text = getString(R.string.items_sold) })
+        live.flatMap { it.lines }.groupBy { it.name }
+            .map { (name, lines) -> Triple(name, lines.sumOf { it.qty }, lines.sumOf { it.amount }) }
+            .sortedWith(compareByDescending<Triple<String, Int, Double>> { it.second }.thenBy { it.first })
+            .forEach { (name, qty, amount) ->
+                dayItems.addView(LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(0, dp(4), 0, dp(4))
+                    addView(text(name, 14f), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                    addView(text("× $qty", 14f, colour = R.color.ink_soft).apply { gravity = Gravity.END }, LinearLayout.LayoutParams(dp(48), LinearLayout.LayoutParams.WRAP_CONTENT))
+                    addView(text(MainActivity.rs(amount), 14f).apply { gravity = Gravity.END }, LinearLayout.LayoutParams(dp(76), LinearLayout.LayoutParams.WRAP_CONTENT))
+                })
+            }
+    }
+
+    /** How a bill was paid, as a small coloured label: Cash, UPI, Credit, or Not settled. */
+    private fun payPill(s: Sale): TextView {
+        val (label, fg, bg) = when {
+            s.unsettled -> Triple(getString(R.string.not_settled), R.color.danger, R.color.danger_soft)
+            s.onCredit -> Triple(getString(R.string.pay_credit), R.color.warn, R.color.warn_soft)
+            s.payment == "UPI" -> Triple(getString(R.string.pay_upi), R.color.accent, R.color.accent_soft)
+            else -> Triple(getString(R.string.pay_cash), R.color.ok, R.color.ok_soft)
+        }
+        return TextView(this).apply {
+            text = label
+            textSize = 11f
+            setTypeface(Fonts.sans(this@SalesActivity), android.graphics.Typeface.BOLD)
+            setTextColor(getColor(fg))
+            setPadding(dp(7), dp(2), dp(7), dp(2))
+            background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = dp(3).toFloat(); setColor(getColor(bg)) }
+        }
     }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()

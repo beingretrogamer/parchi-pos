@@ -73,13 +73,13 @@ class LedgerActivity : ParchiActivity() {
         val accounts = Ledger.accounts(this)
         val owing = accounts.filter { it.balance > 0.005 }
         total.text = MainActivity.rs(owing.sumOf { it.balance })
-        sub.text = getString(R.string.ledger_owing, owing.size)
+        sub.text = resources.getQuantityString(R.plurals.ledger_owing, owing.size, owing.size)
         empty.setText(R.string.no_accounts)
         empty.visibility = if (accounts.isEmpty()) View.VISIBLE else View.GONE
         accounts.forEach { a ->
             val settled = a.balance <= 0.005
             val detail = listOf(
-                getString(R.string.n_credit_bills, a.bills),
+                resources.getQuantityString(R.plurals.n_credit_bills, a.bills, a.bills),
                 if (a.lastTime > 0) SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(a.lastTime)) else "",
                 if (a.balance < -0.005) getString(R.string.advance, MainActivity.rs(-a.balance)) else "",
             ).filter { it.isNotBlank() }.joinToString("  ·  ")

@@ -107,10 +107,20 @@ class CloudActivity : ParchiActivity() {
 
         renderChoices()
 
-        val phones = Cloud.phones(this)
+        // Each device with its app version and when it last synced, so an old version stands out.
+        val phones = Cloud.phones(this).ifEmpty { listOf(Cloud.Phone(me.deviceId, me.name, me.letter, true, SyncEngine.appVersion(this))) }
         findViewById<TextView>(R.id.phonesList).text = phones.joinToString("\n") { p ->
-            getString(R.string.phone_row, p.letter, p.name, if (p.id == me.deviceId) getString(R.string.phone_you) else if (!p.active) getString(R.string.phone_removed) else "")
-        }.ifEmpty { getString(R.string.phone_row, me.letter, me.name, getString(R.string.phone_you)) }
+            val notes = mutableListOf<String>()
+            if (p.id == me.deviceId) notes += getString(R.string.phone_you)
+            if (!p.active) notes += getString(R.string.phone_removed)
+            val version = if (p.id == me.deviceId) SyncEngine.appVersion(this) else p.appVersion
+            version?.let { v ->
+                notes += getString(R.string.phone_version, v) +
+                    if (st.latest.isNotEmpty() && Protocol.compareVersions(st.latest, v) > 0) ", " + getString(R.string.phone_update, st.latest) else ""
+            }
+            if (p.id != me.deviceId) p.lastSeenAt?.let { notes += getString(R.string.phone_seen, ago(it)) }
+            getString(R.string.phone_row, p.letter, p.name) + if (notes.isEmpty()) "" else "  (" + notes.joinToString(", ") + ")"
+        }
 
         val problems = Store.rejected(this)
         findViewById<View>(R.id.problemsCard).visibility = if (problems.isEmpty()) View.GONE else View.VISIBLE
@@ -232,7 +242,7 @@ class CloudActivity : ParchiActivity() {
         val waiting = Store.outboxCount(this)
         val l = CloudSetup.leaving(this)
         val msg = getString(R.string.disconnect_confirm, me.accountName, l.bills, l.payments, l.otherBills, l.otherPayments) +
-            if (waiting > 0) "\n\n" + getString(R.string.disconnect_waiting, waiting) else ""
+            if (waiting > 0) "\n\n" + resources.getQuantityString(R.plurals.disconnect_waiting, waiting, waiting) else ""
         AlertDialog.Builder(this)
             .setMessage(msg)
             .setPositiveButton(R.string.btn_disconnect) { _, _ ->
@@ -258,4 +268,14 @@ class CloudActivity : ParchiActivity() {
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+    private fun ago(t: Long): String {
+        val m = ((Cloud.now(this) - t) / 60_000).coerceAtLeast(0)
+        return when {
+            m < 2 -> getString(R.string.seen_now)
+            m < 60 -> getString(R.string.seen_minutes, m.toInt())
+            m < 48 * 60 -> getString(R.string.seen_hours, (m / 60).toInt())
+            else -> getString(R.string.seen_days, (m / 1440).toInt())
+        }
+    }
 }

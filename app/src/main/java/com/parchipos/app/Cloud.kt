@@ -30,7 +30,7 @@ object Cloud {
         val connectedAt: Long,
     )
 
-    data class Phone(val id: String, val name: String, val letter: String, val active: Boolean)
+    data class Phone(val id: String, val name: String, val letter: String, val active: Boolean, val appVersion: String? = null, val lastSeenAt: Long? = null)
 
     /** What the status line says. */
     enum class State { STANDALONE, LIVE, WAITING, OFFLINE, ERROR, UPGRADE, REMOVED }
@@ -80,7 +80,8 @@ object Cloud {
     fun phones(c: Context): List<Phone> = Store.get(c, "cloud.devices")?.let { s ->
         try {
             val a = JSONArray(s)
-            (0 until a.length()).map { a.getJSONObject(it).let { o -> Phone(o.getString("id"), o.optString("name"), o.optString("letter"), o.optString("status") == "active") } }
+            (0 until a.length()).map { a.getJSONObject(it).let { o -> Phone(o.getString("id"), o.optString("name"), o.optString("letter"), o.optString("status") == "active",
+                o.optString("appVersion").ifBlank { null }, o.optLong("lastSeenAt").takeIf { it > 0 }) } }
         } catch (_: Exception) {
             emptyList()
         }
