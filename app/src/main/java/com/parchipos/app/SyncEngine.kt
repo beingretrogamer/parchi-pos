@@ -53,6 +53,9 @@ object SyncEngine {
     fun listen(l: () -> Unit) { listeners.add(l) }
     fun unlisten(l: () -> Unit) { listeners.remove(l) }
 
+    /** Something arrived outside a sync round (a live update): screens refresh. */
+    fun changed() = notifyListeners()
+
     private fun notifyListeners() {
         if (listeners.isEmpty()) return
         try { ui.post { listeners.forEach { it() } } } catch (_: Exception) {}
@@ -144,7 +147,8 @@ object SyncEngine {
         }
 
         val t0 = System.currentTimeMillis()
-        val replies = CloudApi.sync(me.server, me.deviceKey, messages)
+        // Over the live socket when it is open; otherwise (or if it doesn't answer) over HTTP.
+        val replies = Live.round(messages) ?: CloudApi.sync(me.server, me.deviceKey, messages)
         val t1 = System.currentTimeMillis()
         diagSent = true
 

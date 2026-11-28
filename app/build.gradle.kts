@@ -11,8 +11,8 @@ android {
         applicationId = "com.parchipos.app"
         minSdk = 24          // Android 7 — covers any phone still behind a counter
         targetSdk = 34
-        versionCode = 16
-        versionName = "0.8.1"
+        versionCode = 17
+        versionName = "0.9.0"
     }
 
     /*
