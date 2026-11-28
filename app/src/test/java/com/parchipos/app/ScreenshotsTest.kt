@@ -233,7 +233,17 @@ class ScreenshotsTest {
         shot("${prefix}12-cloud", Robolectric.buildActivity(CloudActivity::class.java).setup().get())
     }
 
-    @Test @Config(qualifiers = "w393dp-h852dp-xhdpi") fun phone() = all("phone-", true)
+    @Test @Config(qualifiers = "w393dp-h852dp-xhdpi") fun phone() {
+        all("phone-", true)
+        // The launcher icon as a round home-screen icon would show it.
+        val icon = c.getDrawable(R.mipmap.ic_launcher)!!
+        val bmp = Bitmap.createBitmap(432, 432, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        canvas.clipPath(android.graphics.Path().apply { addCircle(216f, 216f, 216f, android.graphics.Path.Direction.CW) })
+        icon.setBounds(0, 0, 432, 432)
+        icon.draw(canvas)
+        FileOutputStream(File(out, "icon.png")).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
     @Test @Config(qualifiers = "w393dp-h852dp-night-xhdpi") fun phoneDark() = all("phone-dark-", true)
     @Test @Config(qualifiers = "w690dp-h830dp-xhdpi") fun foldOpen() = all("fold-", false)
     @Test @Config(qualifiers = "w1280dp-h800dp-land-mdpi") fun tablet() = all("tablet-", false)

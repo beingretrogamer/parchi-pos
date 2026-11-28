@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Counts people read: "1 item", "3 items". -->
+<resources>
+    <plurals name="cart_title">
+        <item quantity="one">Order · %d item</item>
+        <item quantity="other">Order · %d items</item>
+    </plurals>
+    <plurals name="btn_send_kitchen">
+        <item quantity="one">Send to kitchen · %d item</item>
+        <item quantity="other">Send to kitchen · %d items</item>
+    </plurals>
+    <plurals name="n_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+    <plurals name="n_bills">
+        <item quantity="one">%1$d bill</item>
+        <item quantity="other">%1$d bills</item>
+    </plurals>
+    <plurals name="ledger_owing">
+        <item quantity="one">owed by %1$d customer</item>
+        <item quantity="other">owed by %1$d customers</item>
+    </plurals>
+    <plurals name="n_credit_bills">
+        <item quantity="one">%1$d credit bill</item>
+        <item quantity="other">%1$d credit bills</item>
+    </plurals>
+    <plurals name="sync_all_sent">
+        <item quantity="one">The %1$d bill is sent</item>
+        <item quantity="other">All %1$d bills sent</item>
+    </plurals>
+    <plurals name="tile_not_on_bill">
+        <item quantity="one">%1$d round not on the bill</item>
+        <item quantity="other">%1$d rounds not on the bill</item>
+    </plurals>
+    <plurals name="order_guests">
+        <item quantity="one">%1$d guest</item>
+        <item quantity="other">%1$d guests</item>
+    </plurals>
+    <plurals name="n_seats">
+        <item quantity="one">%1$d seat</item>
+        <item quantity="other">%1$d seats</item>
+    </plurals>
+    <plurals name="order_total">
+        <item quantity="one">%1$d item · %2$s</item>
+        <item quantity="other">%1$d items · %2$s</item>
+    </plurals>
+    <plurals name="order_late_rounds">
+        <item quantity="one">%1$d round reached the kitchen after the bill was printed: bill the rest, or reopen the bill.</item>
+        <item quantity="other">%1$d rounds reached the kitchen after the bill was printed: bill the rest, or reopen the bill.</item>
+    </plurals>
+    <plurals name="discard_round_body">
+        <item quantity="one">%1$d item hasn\'t been sent to the kitchen yet.</item>
+        <item quantity="other">%1$d items haven\'t been sent to the kitchen yet.</item>
+    </plurals>
+    <plurals name="paste_added">
+        <item quantity="one">Added %1$d item</item>
+        <item quantity="other">Added %1$d items</item>
+    </plurals>
+    <plurals name="paste_added_skipped">
+        <item quantity="one">Added %1$d item; skipped %2$d lines without a price</item>
+        <item quantity="other">Added %1$d items; skipped %2$d lines without a price</item>
+    </plurals>
+    <plurals name="backup_row">
+        <item quantity="one">%1$s\n%2$d item · %3$s\n%4$s</item>
+        <item quantity="other">%1$s\n%2$d items · %3$s\n%4$s</item>
+    </plurals>
+    <plurals name="disconnect_waiting">
+        <item quantity="one">%1$d change hasn\'t uploaded yet and won\'t reach the account.</item>
+        <item quantity="other">%1$d changes haven\'t uploaded yet and won\'t reach the account.</item>
+    </plurals>
+</resources>

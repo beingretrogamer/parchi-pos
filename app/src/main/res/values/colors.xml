@@ -5,7 +5,7 @@
   one product. Keep the two in step; dark values are in values-night.
 -->
 <resources>
-    <color name="ic_launcher_background">#9A3412</color>
+    <color name="ic_launcher_background">#3446A8</color>
 
     <color name="bg">#F3EEE4</color>          <!-- paper -->
     <color name="bg_2">#E9E2D4</color>        <!-- paper-2 -->

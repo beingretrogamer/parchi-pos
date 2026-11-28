@@ -114,6 +114,35 @@
         <item name="android:textSize">14sp</item>
     </style>
 
+    <!-- The till's header actions: an icon (20dp, the portal's set), with its word where there is room. -->
+    <style name="NavButton">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:layout_marginStart">4dp</item>
+        <item name="android:minWidth">40dp</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:paddingStart">10dp</item>
+        <item name="android:paddingEnd">10dp</item>
+        <item name="android:background">@drawable/btn_secondary</item>
+        <item name="android:drawableTint">@color/ink</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <!-- A category's name above its tiles in "All": the slip-heading mono. -->
+    <style name="GridHeading">
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFamily">@font/plex_mono</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:letterSpacing">0.1</item>
+        <item name="android:textColor">@color/ink_faint</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:paddingTop">10dp</item>
+        <item name="android:paddingBottom">6dp</item>
+    </style>
+
     <!-- Equal-width buttons sharing a row. -->
     <style name="PayButton">
         <item name="android:layout_width">0dp</item>

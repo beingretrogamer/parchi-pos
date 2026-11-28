@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wide screens: the order sits beside the menu, set off by a hairline on its left. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/line" />
+        </shape>
+    </item>
+    <item android:left="1dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/card" />
+        </shape>
+    </item>
+</layer-list>

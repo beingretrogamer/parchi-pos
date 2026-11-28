@@ -15,11 +15,15 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.RadioGroup
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import org.json.JSONObject
@@ -126,11 +130,56 @@ class SettingsActivity : ParchiActivity() {
         findViewById<TextView>(R.id.versionText).text = getString(R.string.version_line, appVersion())
     }
 
+    /**
+     * A row of chips under the title, one per section card on show (Printers,
+     * Bill, Parchi Cloud…); each scrolls to its card, so the long page has a contents line.
+     */
+    private fun renderJumps() {
+        val scroll = (findViewById<ViewGroup>(android.R.id.content)).getChildAt(0) as? ScrollView ?: return
+        val page = scroll.getChildAt(0) as? LinearLayout ?: return
+        (page.findViewWithTag<View>("jumps"))?.let { page.removeView(it) }
+        val sections = listOf(R.string.section_printer to R.string.jump_printers, R.string.section_bill to R.string.jump_bill,
+            R.string.title_cloud to R.string.jump_cloud, R.string.label_sync to R.string.jump_sync, R.string.label_activity to R.string.jump_log)
+        val cards = sections.mapNotNull { (heading, chip) ->
+            val label = getString(heading)
+            (0 until page.childCount).map { page.getChildAt(it) }
+                .firstOrNull { card -> card.visibility == View.VISIBLE && card is ViewGroup && firstText(card) == label }
+                ?.let { it to getString(chip) }
+        }
+        if (cards.size < 2) return
+        val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, dp(12)) }
+        cards.forEach { (card, label) ->
+            bar.addView(TextView(this).apply {
+                text = label
+                textSize = 14f
+                gravity = android.view.Gravity.CENTER
+                setPadding(dp(14), 0, dp(14), 0)
+                setTextColor(getColor(R.color.ink))
+                setBackgroundResource(R.drawable.chip)
+                setOnClickListener { scroll.smoothScrollTo(0, card.top - dp(8)) }
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(36)).apply { marginEnd = dp(8) })
+        }
+        page.addView(HorizontalScrollView(this).apply {
+            tag = "jumps"
+            isHorizontalScrollBarEnabled = false
+            isHorizontalFadingEdgeEnabled = true
+            setFadingEdgeLength(dp(24))
+            addView(bar)
+        }, 1)
+    }
+
+    private fun firstText(v: View): String? = when (v) {
+        is TextView -> v.text?.toString()
+        is ViewGroup -> (0 until v.childCount).firstNotNullOfOrNull { firstText(v.getChildAt(it)) }
+        else -> null
+    }
+
     override fun onResume() {
         super.onResume()
         logView.text = PrintLog.text().ifEmpty { getString(R.string.no_activity) }
         renderCloud()
         renderSync()
+        renderJumps()
     }
 
     /** The outlet's header is on screen and an owner or manager has unlocked it for editing. */
@@ -466,7 +515,7 @@ class SettingsActivity : ParchiActivity() {
             val waiting = Sync.pending(this).size
             val st = Prefs.syncStatus(this)
             val lines = mutableListOf(
-                if (waiting == 0) getString(R.string.sync_all_sent, total) else getString(R.string.sync_waiting, waiting, total),
+                if (waiting == 0) resources.getQuantityString(R.plurals.sync_all_sent, total, total) else getString(R.string.sync_waiting, waiting, total),
             )
             if (st.at > 0) lines += getString(R.string.sync_last, SimpleDateFormat("d MMM, HH:mm", Locale.getDefault()).format(Date(st.at)))
             if (st.error.isNotEmpty()) lines += getString(R.string.sync_error, st.error)
@@ -497,4 +546,6 @@ class SettingsActivity : ParchiActivity() {
         private const val REQ_BT_PERMISSION = 31
         private const val REQ_BT_ON = 32
     }
+
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 }

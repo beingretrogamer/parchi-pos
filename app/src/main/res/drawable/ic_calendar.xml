@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A calendar page, for the bill's date. Drawn on the portal's 20-unit grid with its 1.6 stroke (parchi-cloud web/src/ui/icons.tsx); tinted where used. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path
+        android:pathData="M5,4.5h10a2,2 0 0 1 2,2v8.5a2,2 0 0 1 -2,2h-10a2,2 0 0 1 -2,-2v-8.5a2,2 0 0 1 2,-2z"
+        android:strokeColor="@color/ink"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.6" />
+    <path
+        android:pathData="M3,8.5h14M7,2.75V6M13,2.75V6"
+        android:strokeColor="@color/ink"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.6" />
+</vector>

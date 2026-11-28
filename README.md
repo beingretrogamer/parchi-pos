@@ -61,8 +61,17 @@ and has nothing listening on a port.
 
 ## At the counter
 
+- **The header:** the shop's name, with the sync status under it once the
+  device is on Parchi Cloud. On a phone, Tables, Sales, Dues, Menu and Settings
+  are icons; press and hold one for its name. On a tablet or an open Fold they
+  show their names too.
+- **Tablet or open Fold:** the order sits beside the menu and stays there,
+  instead of covering the menu's lower half.
+- **All** shows each category under its name, and the name of the category
+  you're in stays at the top as you scroll.
 - Tap a tile to add it, and tap again for more. For momos, waffles, scoops,
-  mojitos and similar items, the app asks which size or flavour you want.
+  mojitos and similar items, the app shows each size or flavour as a big
+  button with its price.
 - **Edit while billing:** tap a line in the cart to change its name, rate or
   quantity, or to add a note for the kitchen, such as "less spicy" or "Mint
   mojito" for a combo. Notes print on both slips. The edit applies to that
@@ -178,9 +187,11 @@ From then on:
   *Not accepted by Parchi Cloud* on the Parchi Cloud screen.
   - **When it goes again:** once each time the app starts, and when you press
     **Send again**. The account's rules may have changed in between.
-- **Status dot.** The dot in the till's header is green when everything is
-  up. It turns amber with a count when bills are waiting, and red when sync
-  has stopped. Tap it for details.
+- **Sync status.** Under the shop's name: "● Live · Galla" in green when
+  everything is up, "● 3 waiting" or "● Offline" in amber when bills are
+  waiting, red when sync has stopped. Tap it for details. The Parchi Cloud
+  screen lists each device of the outlet with its app version and when it
+  last synced, and says when a newer version is out.
 - **Other devices' bills** appear in Sales, with the device's name.
   - **IceCreamOS copies:** copies of other phones' bills from the old
     IceCreamOS feed show only once that phone has uploaded them to the account.
@@ -258,17 +269,17 @@ account, or the board menu.
 **Who sees it:** a connected device whose outlet has tables, set up in the portal under Tables. It gets a **Tables** button on the till. Every other device is unchanged.
 
 **Seating and ordering**
-- **Tables** shows every table by area, live:
-  - free;
-  - running: what has gone to the kitchen, and for how long;
-  - a bill waiting for its payment.
+- **Tables** shows every table by area, live, with its seats:
+  - free (plain);
+  - running (blue): what has gone to the kitchen, and for how long;
+  - a bill waiting for its payment (amber).
 - **Seating:** tap a free table, optionally count the guests, and the till opens for that table.
 - **Sending a round:** add dishes, then **Send to kitchen**. The kitchen printer prints the round with the table's name, and the device goes back to the tables.
   - Any device can add a round to any table.
   - A round never changes once sent.
-- **Taking an item back:** tap it in the order. The kitchen gets a CANCEL slip with the reason. The till rule *Take back an item sent to the kitchen* decides whether that needs a manager PIN.
+- **Taking an item back:** open **Rounds sent** on the order screen and tap the item. The kitchen gets a CANCEL slip with the reason. The till rule *Take back an item sent to the kitchen* decides whether that needs a manager PIN.
 
-**The order screen** (tap a busy table) shows every round and what the bill comes to so far. From there:
+**The order screen** (tap a busy table) shows what the bill comes to so far first, then the rounds as the kitchen got them, folded under **Rounds sent**. From there:
 - **Print bill:**
   1. The device syncs first, so other devices' rounds are on it.
   2. A preview shows the discount and the outlet's service charge. The guest may refuse the charge; tap *Take service charge off*.
